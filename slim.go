@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"os/exec"
@@ -57,8 +58,9 @@ func (c *client) listener() {
 
 			c.font = font
 			c.setText("SlimYTM")
-
 			c.render()
+
+			c.setVolume(50)
 			go c.clock()
 			time.Sleep(time.Second * 2)
 			c.displayClock = true
@@ -112,15 +114,76 @@ func (c *client) playSong(videoID string) {
 		panic(err)
 	}
 
+	c.setVolume(50)
+
 	header := "GET /assets/audio.wav HTTP/1.0\n\n"
 	msg := make([]byte, 2)
 	binary.BigEndian.PutUint16(msg, uint16(28+len(header)))
 	msg = append(msg, []byte("strm")...)
-	msg = append(msg, 's', '1', 'p', '1', '4', '2', '1', 1, 0, 1, '0', 0, 0, 0, 0, 0, 0, 0, 35, 40, 0, 0, 0, 0)
+	msg = append(msg, 's', '1', 'p', '1', '4', '2', '1', 0xff, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 40, 0, 0, 0, 0)
 	msg = append(msg, []byte(header)...)
 	fmt.Println(len(msg))
 	c.conn.Write(msg)
 	fmt.Println(hex.Dump(msg))
+}
+
+func (c *client) setVolume(volume int) {
+	// Volume is 0-100
+	level := fmt.Sprintf("%05X", int(0x80000*math.Pow(float64(volume)/100, 2)))
+
+	// out_LL            d0:0354	# volume output control: left->left gain
+	// out_RR            d0:0357	# volume output control: right->right gain
+	// VOLUME		  cwrite:0010	# volume
+
+	// Digital volume control?
+	i2c := c.makeI2C("d0", "0354", level)
+	i2c = append(i2c, c.makeI2C("d0", "0357", level)...)
+	i2c = append(i2c, c.makeI2C("cwrite", "0010", "7600")...)
+
+	msg := make([]byte, 2)
+	binary.BigEndian.PutUint16(msg, uint16(4+len(i2c)))
+	msg = append(msg, []byte("i2cc")...)
+	msg = append(msg, []byte(i2c)...)
+	fmt.Println(len(msg))
+	c.conn.Write(msg)
+	fmt.Println(hex.Dump(msg))
+}
+
+func (c *client) makeI2C(bank, address, data string) []byte {
+	a := nibbleise(address)
+	d := nibbleise(data)
+
+	var i2c []byte
+	switch bank {
+	case "d0":
+		a32, _ := hex.DecodeString(a[3] + a[2])
+		a10, _ := hex.DecodeString(a[1] + a[0])
+		d4, _ := hex.DecodeString("0" + d[4])
+		d32, _ := hex.DecodeString(d[3] + d[2])
+		d10, _ := hex.DecodeString(d[1] + d[0])
+		i2c = []byte{'s', 0x3e, 'w', 0x68, 'w', 0xe0, 'w', 0x00, 'w', 0x00, 'w', 0x01, 'w', a32[0], 'w', a10[0],
+			'w', 0x00, 'w', d4[0], 'w', d32[0], 'p', d10[0]}
+
+	case "cwrite":
+		a32, _ := hex.DecodeString(a[3] + a[2])
+		a10, _ := hex.DecodeString(a[1] + a[0])
+		d32, _ := hex.DecodeString(d[3] + d[2])
+		d10, _ := hex.DecodeString(d[1] + d[0])
+		i2c = []byte{'s', 0x3e, 'w', 0x6c, 'w', a32[0], 'w', a10[0],
+			'w', d32[0], 'p', d10[0]}
+	}
+
+	return i2c
+}
+
+// Nibbelise converts a hex string into nibbles. Least significant at [0]
+func nibbleise(in string) []string {
+	var out []string
+	for k := range in {
+		out = append(out, string(in[len(in)-1-k]))
+	}
+
+	return out
 }
 
 func tcpListener() {

@@ -9,8 +9,6 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// const YTM_URL = "https://music.youtube.com/watch?v=mTTB90p23qo"
-
 var queue []*gabs.Container
 var queueIndex int
 var paused bool
