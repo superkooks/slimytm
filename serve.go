@@ -3,16 +3,10 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"sync"
 
 	"github.com/Jeffail/gabs/v2"
 	"github.com/gorilla/mux"
 )
-
-var queue []*gabs.Container
-var queueIndex int
-var paused bool
-var queueLock = new(sync.Mutex)
 
 func playSongs(w http.ResponseWriter, r *http.Request) {
 	body, err := gabs.ParseJSONBuffer(r.Body)
@@ -25,10 +19,9 @@ func playSongs(w http.ResponseWriter, r *http.Request) {
 	queueLock.Lock()
 	startSong := body.Path("startSong")
 	queue = []*gabs.Container{startSong}
-	queueIndex = 0
+	queueIndex = -1
 	queueLock.Unlock()
-
-	go clients[0].playSong(queue[0].Path("videoId").Data().(string))
+	nextSong()
 
 	// Retrieve the rest of the songs and enqueue them
 	queueType := body.Path("queueType").Data().(string)
@@ -55,6 +48,15 @@ func playSongs(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		queueLock.Unlock()
+
+		fmt.Println("going to preload")
+		fmt.Println("Length:", len(queue))
+		fmt.Println("Index @", queueIndex)
+		if queueIndex+1 < len(queue) {
+			fmt.Println("preload")
+			fmt.Println(queue[queueIndex].Path("title").String())
+			preloadSong(queue[queueIndex+1].Path("videoId").Data().(string))
+		}
 	default:
 		panic("unknown queue type")
 	}
@@ -84,6 +86,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 func main() {
 	go startSqueezebox()
+	go queueWatcher()
 
 	fmt.Println("Serving api on :9001")
 	r := mux.NewRouter()

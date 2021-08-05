@@ -1,14 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"math"
 	"net"
 	"os"
-	"os/exec"
 	"time"
 
 	"golang.org/x/text/encoding/charmap"
@@ -37,7 +35,7 @@ func (c *client) listener() {
 		fmt.Println(b[:n])
 		fmt.Println("DATA LEN:", n)
 
-		if bytes.Equal(b[:4], []byte("HELO")) {
+		if string(b[:4]) == "HELO" {
 			fmt.Println("Squeezebox says HELO!")
 			clients = append(clients, c)
 
@@ -64,6 +62,13 @@ func (c *client) listener() {
 			go c.clock()
 			time.Sleep(time.Second * 2)
 			c.displayClock = true
+		} else if string(b[:4]) == "STAT" {
+			lastStat = time.Now()
+			if string(b[8:12]) == "STMa" {
+				playing = true
+			}
+
+			fmt.Println("STAT", string(b[8:12]))
 		}
 	}
 }
@@ -83,7 +88,7 @@ func (c *client) clock() {
 	for {
 		if c.displayClock {
 			h, m, s := time.Now().Local().Clock()
-			c.setText(fmt.Sprintf("            %02d:%02d:%02d", h, m, s))
+			c.setText(fmt.Sprintf("                %02d:%02d:%02d", h, m, s))
 			c.render()
 		}
 
@@ -92,29 +97,16 @@ func (c *client) clock() {
 }
 
 func (c *client) playSong(videoID string) {
+	if !nextSongLoaded {
+		preloadSong(videoID)
+	}
+
 	os.Remove("assets/audio.webm")
 	os.Remove("assets/audio.wav")
+	os.Rename("assets/next.wav", "assets/audio.wav")
+	nextSongLoaded = false
 
-	co := exec.Command("youtube-dl", "https://music.youtube.com/watch?v="+videoID, "-f", "bestaudio[ext=webm]",
-		"-o", "assets/audio.webm", "--external-downloader", "aria2c")
-	fmt.Println(co.String())
-	b, err := co.CombinedOutput()
-	fmt.Println(string(b))
-	if err != nil {
-		panic(err)
-	}
-
-	wkdir, err := os.Getwd()
-	if err != nil {
-		panic(err)
-	}
-
-	_, err = exec.Command("ffmpeg", "-y", "-i", wkdir+"/assets/audio.webm", "-vn", wkdir+"/assets/audio.wav").Output()
-	if err != nil {
-		panic(err)
-	}
-
-	c.setVolume(50)
+	c.setVolume(25)
 
 	header := "GET /assets/audio.wav HTTP/1.0\n\n"
 	msg := make([]byte, 2)

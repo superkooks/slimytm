@@ -77,7 +77,7 @@ func (c *client) setChar(chr []byte, offset int) {
 }
 
 func (c *client) setText(text string) {
-	if len(text) > 35 {
+	if len(text) > displayWidth/8 {
 		panic("text too long to display")
 	}
 
