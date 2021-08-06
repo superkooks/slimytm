@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 
 	"github.com/Jeffail/gabs/v2"
 	"github.com/gorilla/mux"
 )
+
+var audioAssetsBytes = new(bytes.Buffer)
 
 func playSongs(w http.ResponseWriter, r *http.Request) {
 	body, err := gabs.ParseJSONBuffer(r.Body)
@@ -47,16 +50,11 @@ func playSongs(w http.ResponseWriter, r *http.Request) {
 				queueIndex = k
 			}
 		}
-		queueLock.Unlock()
 
-		fmt.Println("going to preload")
-		fmt.Println("Length:", len(queue))
-		fmt.Println("Index @", queueIndex)
-		if queueIndex+1 < len(queue) {
-			fmt.Println("preload")
-			fmt.Println(queue[queueIndex].Path("title").String())
-			preloadSong(queue[queueIndex+1].Path("videoId").Data().(string))
-		}
+		fmt.Println("index @", queueIndex)
+		fmt.Println("length:", len(queue))
+		fmt.Println("next song:", queue[queueIndex+1].Path("title").String())
+		queueLock.Unlock()
 	default:
 		panic("unknown queue type")
 	}
@@ -70,6 +68,10 @@ func currentSong(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("{}"))
 	}
 	queueLock.Unlock()
+}
+
+func audio(w http.ResponseWriter, r *http.Request) {
+	w.Write(audioAssetsBytes.Bytes())
 }
 
 func corsMiddleware(next http.Handler) http.Handler {
@@ -93,5 +95,6 @@ func main() {
 	r.Use(corsMiddleware)
 	r.Path("/play").HandlerFunc(playSongs)
 	r.Path("/currentsong").HandlerFunc(currentSong)
+	r.Path("/assets/audio.wav").HandlerFunc(audio)
 	panic(http.ListenAndServe(":9001", r))
 }

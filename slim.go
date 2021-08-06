@@ -7,6 +7,7 @@ import (
 	"math"
 	"net"
 	"os"
+	"os/exec"
 	"time"
 
 	"golang.org/x/text/encoding/charmap"
@@ -97,14 +98,26 @@ func (c *client) clock() {
 }
 
 func (c *client) playSong(videoID string) {
-	if !nextSongLoaded {
-		preloadSong(videoID)
+	co := exec.Command("youtube-dl", "https://music.youtube.com/watch?v="+videoID, "-f", "bestaudio[ext=webm]", "-g")
+	fmt.Println(co.String())
+	b, err := co.CombinedOutput()
+	fmt.Println(string(b))
+	if err != nil {
+		panic(err)
 	}
 
-	os.Remove("assets/audio.webm")
-	os.Remove("assets/audio.wav")
-	os.Rename("assets/next.wav", "assets/audio.wav")
-	nextSongLoaded = false
+	audioAssetsBytes.Reset()
+	fcmd := exec.Command("ffmpeg", "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5", "-i",
+		string(b), "-f", "wav", "-ar", "48000", "-ac", "2", "-loglevel", "warning", "-vn", "-")
+	fcmd.Stdout = audioAssetsBytes
+	fcmd.Stderr = os.Stderr
+
+	err = fcmd.Start()
+	if err != nil {
+		panic(err)
+	}
+
+	time.Sleep(time.Millisecond * 1000)
 
 	c.setVolume(25)
 
@@ -112,11 +125,13 @@ func (c *client) playSong(videoID string) {
 	msg := make([]byte, 2)
 	binary.BigEndian.PutUint16(msg, uint16(28+len(header)))
 	msg = append(msg, []byte("strm")...)
-	msg = append(msg, 's', '1', 'p', '1', '4', '2', '1', 0xff, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 40, 0, 0, 0, 0)
+	msg = append(msg, 's', '1', 'p', '1', '4', '2', '1', 0xff, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 41, 0, 0, 0, 0)
 	msg = append(msg, []byte(header)...)
 	fmt.Println(len(msg))
 	c.conn.Write(msg)
 	fmt.Println(hex.Dump(msg))
+
+	playing = true
 }
 
 func (c *client) setVolume(volume int) {
