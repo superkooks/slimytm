@@ -126,6 +126,7 @@ app.component("song", {
     <div class="title"><span @click="$emit('playSong', song)">{{ song.title }}</span></div>
     <div class="artist"><span>{{ song.artists[0].name }}</span></div>
     <div class="album"><span>{{ song.album != null ? song.album.name : "" }}</span></div>
+    <div class="duration"><span class="noHover">{{ song.duration }}</span></div>
 </div>
 <hr>`
 })

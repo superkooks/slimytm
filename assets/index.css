@@ -170,19 +170,19 @@ p#playlistDuration {
 }
 
 .song .title {
-    width: 600px;
+    width: 544px;
     font-weight: 500;
 }
 
 .song .artist {
-    width: 600px;
+    width: 544px;
 }
 
 .song .album {
-    width: 600px;
+    width: 544px;
 }
 
-.song div *:hover {
+.song div *:hover:not(.noHover) {
     /* Text for song, artist, album names */
     text-decoration: underline;
     cursor: pointer;
