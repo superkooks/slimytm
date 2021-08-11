@@ -64,11 +64,13 @@ func (c *client) listener() {
 			time.Sleep(time.Second * 2)
 			c.displayClock = true
 		} else if string(b[:4]) == "STAT" {
-			lastStat = time.Now()
 			if string(b[8:12]) == "STMa" {
 				playing = true
 			}
 
+			bytesReceived = int(binary.BigEndian.Uint64(b[23:31]))
+			fullness = int(binary.BigEndian.Uint32(b[19:23]))
+			lastStat = time.Now()
 			fmt.Println("STAT", string(b[8:12]))
 		}
 	}
