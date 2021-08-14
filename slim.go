@@ -41,7 +41,11 @@ func (c *client) listener() {
 			fmt.Println("Squeezebox says HELO!")
 			clients = append(clients, c)
 
-			if b[8] != 2 {
+			if b[8] == 2 {
+				fmt.Println("Talking to a squeezebox1")
+			} else if b[8] == 4 {
+				fmt.Println("Talking to a squeezebox2")
+			} else {
 				panic("non-squeezebox device connected")
 			}
 
@@ -72,7 +76,8 @@ func (c *client) listener() {
 			bytesReceived = int(binary.BigEndian.Uint64(b[23:31]))
 			fullness = int(binary.BigEndian.Uint32(b[19:23]))
 			lastStat = time.Now()
-			fmt.Println("STAT", string(b[8:12]))
+			elapsedSeconds = int(binary.BigEndian.Uint32(b[45:49]))
+			fmt.Println("********** STAT", string(b[8:12]))
 		} else if string(b[:4]) == "IR  " {
 			fmt.Println("IR Code", hex.EncodeToString(b[14:18]))
 			sendXPL(xplMessage{
@@ -124,10 +129,10 @@ func (c *client) playSong(videoID string) {
 		panic(err)
 	}
 
-	audioAssetsBytes.Reset()
+	audioBuffer.Reset()
 	fcmd := exec.Command("ffmpeg", "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5", "-i",
 		string(b), "-f", "wav", "-ar", "48000", "-ac", "2", "-loglevel", "warning", "-vn", "-")
-	fcmd.Stdout = audioAssetsBytes
+	fcmd.Stdout = audioBuffer
 	fcmd.Stderr = os.Stderr
 
 	err = fcmd.Start()
@@ -135,7 +140,11 @@ func (c *client) playSong(videoID string) {
 		panic(err)
 	}
 
-	time.Sleep(time.Millisecond * 1000)
+	for {
+		if audioBuffer.Len() > 48000*2*2*5 {
+			break
+		}
+	}
 
 	c.setVolume(25)
 

@@ -14,6 +14,7 @@ var queue []*gabs.Container
 var queueIndex int
 var playing bool
 var lastStat time.Time
+var elapsedSeconds int
 var queueLock = new(sync.Mutex)
 
 var bytesReceived int
@@ -26,10 +27,16 @@ func queueWatcher() {
 			mins, _ := strconv.Atoi(songTimes[0])
 			secs, _ := strconv.Atoi(songTimes[1])
 
-			// Byte rate should be constant for all songs (I hope)
-			byteRate := 48000 * 2 * 2 // per second
-			bytesPlayed := bytesReceived - fullness
-			songTime := bytesPlayed / byteRate
+			var songTime int
+			if elapsedSeconds != 0 {
+				songTime = elapsedSeconds
+			} else {
+				// Byte rate should be constant for all songs (I hope)
+				byteRate := 48000 * 2 * 2 // per second
+				bytesPlayed := bytesReceived - fullness
+				songTime = bytesPlayed / byteRate
+			}
+
 			fmt.Println("song time:", songTime, "s")
 			fmt.Println("duration:", mins*60+secs)
 
@@ -43,8 +50,8 @@ func queueWatcher() {
 				}
 			} else if time.Since(lastStat).Milliseconds() > 1100 {
 				fmt.Println("presumed buffer underrun")
-				fmt.Println("buffer len:", audioAssetsBytes.Len())
-				fmt.Println("    =", audioAssetsBytes.Len()/byteRate, "s")
+				fmt.Println("buffer len:", audioBuffer.Len())
+				fmt.Println("    =", audioBuffer.Len()/48000/2/2, "s")
 			}
 		}
 

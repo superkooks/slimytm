@@ -3,13 +3,44 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"net/http"
+	"sync"
 
 	"github.com/Jeffail/gabs/v2"
 	"github.com/gorilla/mux"
 )
 
-var audioAssetsBytes = new(bytes.Buffer)
+type audioBufferWrapper struct {
+	b bytes.Buffer
+	m sync.Mutex
+}
+
+func (b *audioBufferWrapper) Read(p []byte) (n int, err error) {
+	b.m.Lock()
+	defer b.m.Unlock()
+	return b.b.Read(p)
+}
+
+func (b *audioBufferWrapper) Write(p []byte) (n int, err error) {
+	b.m.Lock()
+	defer b.m.Unlock()
+	return b.b.Write(p)
+}
+
+func (b *audioBufferWrapper) Len() int {
+	b.m.Lock()
+	defer b.m.Unlock()
+	return b.b.Len()
+}
+
+func (b *audioBufferWrapper) Reset() {
+	b.m.Lock()
+	defer b.m.Unlock()
+	b.b.Reset()
+}
+
+var audioBuffer = new(audioBufferWrapper)
 
 func playSongs(w http.ResponseWriter, r *http.Request) {
 	body, err := gabs.ParseJSONBuffer(r.Body)
@@ -53,7 +84,7 @@ func playSongs(w http.ResponseWriter, r *http.Request) {
 
 		fmt.Println("index @", queueIndex)
 		fmt.Println("length:", len(queue))
-		fmt.Println("next song:", queue[queueIndex+1].Path("title").String())
+		// fmt.Println("next song:", queue[queueIndex+1].Path("title").String())
 		queueLock.Unlock()
 	default:
 		panic("unknown queue type")
@@ -71,7 +102,10 @@ func currentSong(w http.ResponseWriter, r *http.Request) {
 }
 
 func audio(w http.ResponseWriter, r *http.Request) {
-	w.Write(audioAssetsBytes.Bytes())
+	fmt.Println("****** New audio request")
+	fmt.Println("Buffer is currently", audioBuffer.Len(), "bytes long")
+	fmt.Println("     =", audioBuffer.Len()/48000/2/2, "s")
+	io.Copy(w, audioBuffer)
 }
 
 func corsMiddleware(next http.Handler) http.Handler {
@@ -99,5 +133,14 @@ func main() {
 	r.Path("/play").HandlerFunc(playSongs)
 	r.Path("/currentsong").HandlerFunc(currentSong)
 	r.Path("/assets/audio.wav").HandlerFunc(audio)
+
+	// f, _ := os.Open("wa.wav")
+	// n, err := io.Copy(audioAssetsBytes, f)
+	// fmt.Println("copied", n, "bytes")
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// f.Close()
+
 	panic(http.ListenAndServe(":9001", r))
 }
