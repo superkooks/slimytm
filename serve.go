@@ -90,6 +90,9 @@ func main() {
 	go startSqueezebox()
 	go queueWatcher()
 
+	xplInit()
+	go xplListener()
+
 	fmt.Println("Serving api on :9001")
 	r := mux.NewRouter()
 	r.Use(corsMiddleware)

@@ -17,6 +17,7 @@ import (
 type client struct {
 	conn         *net.TCPConn
 	displayClock bool
+	osdText      string
 	font         psfFont
 	framebuffer  [560]byte
 }
@@ -72,6 +73,18 @@ func (c *client) listener() {
 			fullness = int(binary.BigEndian.Uint32(b[19:23]))
 			lastStat = time.Now()
 			fmt.Println("STAT", string(b[8:12]))
+		} else if string(b[:4]) == "IR  " {
+			fmt.Println("IR Code", hex.EncodeToString(b[14:18]))
+			sendXPL(xplMessage{
+				messageType: "xpl-trig",
+				target:      "*",
+				schema:      "remote.basic",
+				body: map[string]string{
+					"keys":   hex.EncodeToString(b[14:18]),
+					"device": "squeezebox",
+					"zone":   "slimserver",
+				},
+			})
 		}
 	}
 }
@@ -92,6 +105,9 @@ func (c *client) clock() {
 		if c.displayClock {
 			h, m, s := time.Now().Local().Clock()
 			c.setText(fmt.Sprintf("                %02d:%02d:%02d", h, m, s))
+			c.render()
+		} else {
+			c.setText(c.osdText)
 			c.render()
 		}
 
