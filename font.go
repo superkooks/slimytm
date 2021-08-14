@@ -6,12 +6,6 @@ import (
 	"os"
 )
 
-const (
-	displayHeight  = 16
-	displayWidth   = 280
-	bytesPerColumn = 2
-)
-
 type psfFont struct {
 	Version       uint32
 	HeaderSize    uint32
@@ -58,30 +52,4 @@ func (p psfFont) getChar(chr int) []byte {
 	}
 
 	return char
-}
-
-func (c *client) setChar(chr []byte, offset int) {
-	i := bytesPerColumn * offset * 8
-	for col := 0; col < 8; col++ {
-		for k := range chr {
-			v := chr[len(chr)-1-(k+8)%16]
-			mask := byte(0b10000000 >> col)
-			if v&mask > 0 {
-				squeezeMask := byte(1 << (i % 8))
-				c.framebuffer[i/8] |= squeezeMask
-			}
-
-			i++
-		}
-	}
-}
-
-func (c *client) setText(text string) {
-	if len(text) > displayWidth/8 {
-		panic("text too long to display")
-	}
-
-	for k, v := range text {
-		c.setChar(c.font.getChar(int(v)), k*8)
-	}
 }
