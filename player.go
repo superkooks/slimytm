@@ -24,8 +24,8 @@ const (
 )
 
 var players []player
-var displayClock = true
-var xplOSDText string
+var displayText string
+var textDelay time.Duration
 
 func tcpListener() {
 	addr, err := net.ResolveTCPAddr("tcp4", ":3483")
@@ -118,15 +118,20 @@ func startSqueezebox() {
 	go tcpListener()
 
 	for {
+		if textDelay <= 0 {
+			displayText = ""
+		}
+
 		for _, p := range players {
-			if displayClock {
+			if displayText == "" {
 				h, m, sec := time.Now().Local().Clock()
 				p.DisplayText(fmt.Sprintf("                %02d:%02d:%02d", h, m, sec))
 			} else {
-				p.DisplayText(xplOSDText)
+				p.DisplayText(displayText)
 			}
 		}
 
 		time.Sleep(time.Millisecond * 100)
+		textDelay -= time.Millisecond * 100
 	}
 }

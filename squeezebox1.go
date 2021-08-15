@@ -41,14 +41,6 @@ func (s *squeezebox1) Listener() {
 	// Set the volume to 1/2 intially
 	s.SetVolume(50)
 
-	// Start rendering routine
-	go func() {
-		for {
-			s.render()
-			time.Sleep(time.Millisecond * 100)
-		}
-	}()
-
 	// Start receiving messages
 	for {
 		b := make([]byte, 1024)
@@ -88,9 +80,13 @@ func (s *squeezebox1) Listener() {
 			if irCode == "7689807f" {
 				// Volume UP
 				s.SetVolume(s.volume + 5)
+				displayText = fmt.Sprintf("Volume = %v/100", s.volume)
+				textDelay = time.Second * 2
 			} else if irCode == "768900ff" {
 				// Volume DOWN
 				s.SetVolume(s.volume - 5)
+				displayText = fmt.Sprintf("Volume = %v/100", s.volume)
+				textDelay = time.Second * 2
 			}
 		}
 	}
@@ -105,6 +101,8 @@ func (s *squeezebox1) DisplayText(text string) {
 		// Set each character individually with an offset
 		s.setChar(s.font.getChar(int(v)), k*8)
 	}
+
+	s.render()
 }
 
 func (s *squeezebox1) Play(videoID string) {
