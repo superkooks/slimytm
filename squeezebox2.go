@@ -15,6 +15,7 @@ type squeezebox2 struct {
 	conn        *net.TCPConn
 	font        psfFont
 	framebuffer [1280]byte
+	volume      int
 }
 
 func (s *squeezebox2) GetModel() int {
@@ -70,17 +71,26 @@ func (s *squeezebox2) Listener() {
 
 		} else if string(b[:4]) == "IR  " {
 			// IR command from the remote
-			fmt.Println("IR Code", hex.EncodeToString(b[14:18]))
+			irCode := hex.EncodeToString(b[14:18])
+			fmt.Println("IR Code", irCode)
 			sendXPL(xplMessage{
 				messageType: "xpl-trig",
 				target:      "*",
 				schema:      "remote.basic",
 				body: map[string]string{
-					"keys":   hex.EncodeToString(b[14:18]),
+					"keys":   irCode,
 					"device": "squeezebox",
 					"zone":   "slimserver",
 				},
 			})
+
+			if irCode == "7689807f" {
+				// Volume UP
+				s.SetVolume(s.volume + 5)
+			} else if irCode == "768900ff" {
+				// Volume DOWN
+				s.SetVolume(s.volume - 5)
+			}
 		}
 	}
 }
@@ -141,6 +151,11 @@ func (s *squeezebox2) Play(videoID string) {
 
 func (s *squeezebox2) SetVolume(volume int) {
 	// Set the volume (0-100)
+	if volume < 0 {
+		volume = 0
+	} else if volume > 100 {
+		volume = 100
+	}
 
 	// Old gain for Squeezebox2 with firmware < 22
 	oldGain := make([]byte, 4)
@@ -158,6 +173,10 @@ func (s *squeezebox2) SetVolume(volume int) {
 		binary.BigEndian.PutUint32(newGain, uint32(floatMult*(1<<16)+0.5))
 	}
 
+	if volume == 0 {
+		newGain = []byte{0, 0, 0, 0}
+	}
+
 	// Dispatch volume message
 	msg := make([]byte, 2)
 	binary.BigEndian.PutUint16(msg, uint16(22))
@@ -170,6 +189,12 @@ func (s *squeezebox2) SetVolume(volume int) {
 	fmt.Println(len(msg))
 	s.conn.Write(msg)
 	fmt.Println(hex.Dump(msg))
+
+	s.volume = volume
+}
+
+func (s *squeezebox2) GetVolume() int {
+	return s.volume
 }
 
 func (s *squeezebox2) render() {

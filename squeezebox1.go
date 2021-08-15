@@ -15,6 +15,7 @@ type squeezebox1 struct {
 	conn        *net.TCPConn
 	font        psfFont
 	framebuffer [560]byte
+	volume      int
 }
 
 func (s *squeezebox1) GetModel() int {
@@ -71,17 +72,26 @@ func (s *squeezebox1) Listener() {
 
 		} else if string(b[:4]) == "IR  " {
 			// IR command from the remote
-			fmt.Println("IR Code", hex.EncodeToString(b[14:18]))
+			irCode := hex.EncodeToString(b[14:18])
+			fmt.Println("IR Code", irCode)
 			sendXPL(xplMessage{
 				messageType: "xpl-trig",
 				target:      "*",
 				schema:      "remote.basic",
 				body: map[string]string{
-					"keys":   hex.EncodeToString(b[14:18]),
+					"keys":   irCode,
 					"device": "squeezebox",
 					"zone":   "slimserver",
 				},
 			})
+
+			if irCode == "7689807f" {
+				// Volume UP
+				s.SetVolume(s.volume + 5)
+			} else if irCode == "768900ff" {
+				// Volume DOWN
+				s.SetVolume(s.volume - 5)
+			}
 		}
 	}
 }
@@ -140,6 +150,12 @@ func (s *squeezebox1) Play(videoID string) {
 
 func (s *squeezebox1) SetVolume(volume int) {
 	// Set the volume (0-100) on the MAS35x9 with I2C
+	if volume < 0 {
+		volume = 0
+	} else if volume > 100 {
+		volume = 100
+	}
+
 	level := fmt.Sprintf("%05X", int(0x80000*math.Pow(float64(volume)/100, 2)))
 
 	// out_LL            d0:0354	# volume output control: left->left gain
@@ -159,6 +175,12 @@ func (s *squeezebox1) SetVolume(volume int) {
 	fmt.Println(len(msg))
 	s.conn.Write(msg)
 	fmt.Println(hex.Dump(msg))
+
+	s.volume = volume
+}
+
+func (s *squeezebox1) GetVolume() int {
+	return s.volume
 }
 
 func (s *squeezebox1) render() {

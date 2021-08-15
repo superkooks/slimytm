@@ -16,6 +16,7 @@ type player interface {
 	DisplayText(text string)
 	Play(videoID string)
 	SetVolume(level int)
+	GetVolume() int
 }
 
 const (
