@@ -79,12 +79,12 @@ func (s *squeezebox1) Listener() {
 
 			if irCode == "7689807f" {
 				// Volume UP
-				s.SetVolume(s.volume + 5)
+				s.SetVolume(s.volume + VOLUME_INCREMENT)
 				displayText = fmt.Sprintf("Volume = %v/100", s.volume)
 				textDelay = time.Second * 2
 			} else if irCode == "768900ff" {
 				// Volume DOWN
-				s.SetVolume(s.volume - 5)
+				s.SetVolume(s.volume - VOLUME_INCREMENT)
 				displayText = fmt.Sprintf("Volume = %v/100", s.volume)
 				textDelay = time.Second * 2
 			}

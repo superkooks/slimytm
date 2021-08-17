@@ -20,7 +20,8 @@ type player interface {
 }
 
 const (
-	AUDIO_PRELOAD = 5 // Seconds of audio to load before playing
+	AUDIO_PRELOAD    = 5 // Seconds of audio to load before playing
+	VOLUME_INCREMENT = 5
 )
 
 var players []player
