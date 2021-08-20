@@ -92,7 +92,7 @@ func xplListener() {
 
 		x := parseXPL(string(b[:n]))
 		if x.schema == "osd.basic" {
-			displayText = x.body["text"]
+			displayAllPlayers(x.body["text"])
 			delay, ok := x.body["delay"]
 			if !ok {
 				delay = "5"

@@ -14,7 +14,7 @@ import (
 type squeezebox2 struct {
 	conn        *net.TCPConn
 	font        psfFont
-	framebuffer [1280]byte
+	framebuffer []byte
 	volume      int
 }
 
@@ -79,12 +79,12 @@ func (s *squeezebox2) Listener() {
 			if irCode == "7689807f" {
 				// Volume UP
 				s.SetVolume(s.volume + 5)
-				displayText = fmt.Sprintf("Volume = %v/100", s.volume)
+				s.DisplayText(fmt.Sprintf("Volume = %v/100", s.volume))
 				textDelay = time.Second * 2
 			} else if irCode == "768900ff" {
 				// Volume DOWN
 				s.SetVolume(s.volume - 5)
-				displayText = fmt.Sprintf("Volume = %v/100", s.volume)
+				s.DisplayText(fmt.Sprintf("Volume = %v/100", s.volume))
 				textDelay = time.Second * 2
 			}
 		}
@@ -93,15 +93,22 @@ func (s *squeezebox2) Listener() {
 
 func (s *squeezebox2) DisplayText(text string) {
 	if len(text) > 40 {
-		panic("text too long to display")
-	}
+		// Scroll text across screen
+		text += "  "
+		variableFrame := make([]byte, 4*8*len(text))
+		for k, v := range text {
+			s.setChar(s.font.getChar(int(v)), k*8, variableFrame)
+		}
 
-	for k, v := range text {
-		// Set each character individually with an offset
-		s.setChar(s.font.getChar(int(v)), k*8)
-	}
+		go s.scrollBuffer(variableFrame)
+	} else {
+		for k, v := range text {
+			// Set each character individually with an offset
+			s.setChar(s.font.getChar(int(v)), k*8, s.framebuffer)
+		}
 
-	s.render()
+		s.render()
+	}
 }
 
 func (s *squeezebox2) Play(videoID string) {
@@ -196,18 +203,49 @@ func (s *squeezebox2) GetVolume() int {
 }
 
 func (s *squeezebox2) render() {
+	if len(s.framebuffer) != 1280 {
+		panic("framebuffer has incorrect length")
+	}
+
 	// Send the current framebuffer to the Squeezebox
 	msg := make([]byte, 2)
 	binary.BigEndian.PutUint16(msg, 1288)
 	msg = append(msg, []byte("grfe")...)
 	msg = append(msg, 0, 0, 'c', 'c')
-	msg = append(msg, s.framebuffer[:]...)
+	msg = append(msg, s.framebuffer...)
 	s.conn.Write(msg)
 
-	s.framebuffer = [1280]byte{}
+	s.framebuffer = make([]byte, 1280)
 }
 
-func (s *squeezebox2) setChar(chr []byte, offset int) {
+func (s *squeezebox2) scrollBuffer(varBuffer []byte) {
+	// Display intial 40 chars
+	s.framebuffer = varBuffer[:1280]
+	s.render()
+	time.Sleep(time.Second * 3)
+
+	// Scroll text across until we reach the start
+	for i := 0; i < len(varBuffer); i += 12 {
+		if i > len(varBuffer)-1280 {
+			// Current frame overlaps end of buffer
+			s.framebuffer = varBuffer[i:]
+			s.framebuffer = append(s.framebuffer, varBuffer[0:1280+i-len(varBuffer)]...)
+		} else {
+			s.framebuffer = varBuffer[i : i+1280]
+		}
+
+		// Animate at 30 fps
+		s.render()
+		time.Sleep(time.Millisecond * 33)
+	}
+
+	// Display the first frame for another second
+	s.framebuffer = varBuffer[:1280]
+	s.render()
+	time.Sleep(time.Second)
+}
+
+func (s *squeezebox2) setChar(chr []byte, offset int, buffer []byte) {
 	// Set the chr in the framebuffer
 	i := 4 * offset * 8
 	for col := 0; col < 8; col++ {
@@ -216,7 +254,7 @@ func (s *squeezebox2) setChar(chr []byte, offset int) {
 			mask := byte(0b10000000 >> col)
 			if v&mask > 0 {
 				squeezeMask := byte(1 << (i % 8))
-				s.framebuffer[i/8] |= squeezeMask
+				buffer[i/8] |= squeezeMask
 			}
 
 			i++

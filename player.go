@@ -25,7 +25,6 @@ const (
 )
 
 var players []player
-var displayText string
 var textDelay time.Duration
 
 func tcpListener() {
@@ -62,10 +61,10 @@ func tcpListener() {
 		var c player
 		if b[8] == 2 {
 			fmt.Println("Connected to a Squeezebox v1")
-			c = &squeezebox1{conn: conn}
+			c = &squeezebox1{conn: conn, framebuffer: make([]byte, 560)}
 		} else if b[8] == 4 {
 			fmt.Println("Connected to a Squeezebox v2")
-			c = &squeezebox2{conn: conn}
+			c = &squeezebox2{conn: conn, framebuffer: make([]byte, 1280)}
 		} else {
 			log.Println("non-squeezebox device tried to connect")
 			continue
@@ -114,21 +113,21 @@ func udpListener() {
 
 }
 
+func displayAllPlayers(text string) {
+	for _, p := range players {
+		p.DisplayText(text)
+	}
+}
+
 func startSqueezebox() {
 	go udpListener()
 	go tcpListener()
 
 	for {
 		if textDelay <= 0 {
-			displayText = ""
-		}
-
-		for _, p := range players {
-			if displayText == "" {
+			for _, p := range players {
 				h, m, sec := time.Now().Local().Clock()
 				p.DisplayText(fmt.Sprintf("                %02d:%02d:%02d", h, m, sec))
-			} else {
-				p.DisplayText(displayText)
 			}
 		}
 
