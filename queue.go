@@ -28,7 +28,7 @@ func queueWatcher() {
 			fmt.Println("song time:", elapsedSeconds, "s")
 			fmt.Println("duration:", mins*60+secs)
 
-			if elapsedSeconds >= mins*60+secs-3 {
+			if elapsedSeconds >= mins*60+secs-1 {
 				fmt.Println("reached end of song")
 				if queueIndex+1 < len(queue) {
 					fmt.Println("playing next song")
@@ -44,10 +44,28 @@ func queueWatcher() {
 }
 
 func nextSong() {
+	players[playingClient].Stop()
+	if queueIndex >= len(queue)-1 {
+		// Don't run off the end of the queue
+		return
+	}
+
 	queueLock.Lock()
 	queueIndex++
 	playing = false
+	queueLock.Unlock()
 
 	players[playingClient].Play(queue[queueIndex].Path("videoId").Data().(string))
+}
+
+func previousSong() {
+	players[playingClient].Stop()
+
+	queueLock.Lock()
+	if elapsedSeconds < 5 && queueIndex != 0 {
+		queueIndex--
+	}
 	queueLock.Unlock()
+
+	players[playingClient].Play(queue[queueIndex].Path("videoId").Data().(string))
 }

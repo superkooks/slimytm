@@ -15,17 +15,19 @@ type player interface {
 	Listener()
 	DisplayText(text string)
 	Play(videoID string)
+	Stop()
 	SetVolume(level int)
 	GetVolume() int
 }
 
 const (
-	AUDIO_PRELOAD    = 5 // Seconds of audio to load before playing
+	AUDIO_PRELOAD    = 10 // Seconds of audio to load before playing
 	VOLUME_INCREMENT = 5
 )
 
 var players []player
 var textDelay time.Duration
+var lastIR time.Time
 
 func tcpListener() {
 	addr, err := net.ResolveTCPAddr("tcp4", ":3483")

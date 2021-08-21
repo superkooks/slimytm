@@ -87,7 +87,15 @@ func (s *squeezebox1) Listener() {
 				s.SetVolume(s.volume - VOLUME_INCREMENT)
 				s.DisplayText(fmt.Sprintf("Volume = %v/100", s.volume))
 				textDelay = time.Second * 2
+			} else if irCode == "7689a05f" && time.Since(lastIR) > time.Second {
+				// NEXT Song
+				nextSong()
+			} else if irCode == "7689c03f" && time.Since(lastIR) > time.Second {
+				// PREVIOUS Song
+				previousSong()
 			}
+
+			lastIR = time.Now()
 		}
 	}
 }
@@ -147,6 +155,17 @@ func (s *squeezebox1) Play(videoID string) {
 	msg = append(msg, []byte("strm")...)
 	msg = append(msg, 's', '1', 'p', '1', '4', '2', '1', 0xff, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 41, 0, 0, 0, 0)
 	msg = append(msg, []byte(header)...)
+	fmt.Println(len(msg))
+	s.conn.Write(msg)
+	fmt.Println(hex.Dump(msg))
+}
+
+func (s *squeezebox1) Stop() {
+	// Send the strm command to the Squeezebox
+	msg := make([]byte, 2)
+	binary.BigEndian.PutUint16(msg, uint16(28))
+	msg = append(msg, []byte("strm")...)
+	msg = append(msg, 'q', '1', 'p', '1', '4', '2', '1', 0xff, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 41, 0, 0, 0, 0)
 	fmt.Println(len(msg))
 	s.conn.Write(msg)
 	fmt.Println(hex.Dump(msg))
