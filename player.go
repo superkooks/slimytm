@@ -14,10 +14,15 @@ type player interface {
 	GetModel() int
 	Listener()
 	DisplayText(text string)
+
 	Play(videoID string)
 	Stop()
+
 	SetVolume(level int)
 	GetVolume() int
+
+	Pause()
+	Unpause()
 }
 
 const (

@@ -92,6 +92,9 @@ func (s *squeezebox2) Listener() {
 			} else if irCode == "7689c03f" && time.Since(lastIR) > time.Second {
 				// PREVIOUS Song
 				previousSong()
+			} else if irCode == "768920df" && time.Since(lastIR) > time.Second {
+				// PAUSE/UNPAUSE Song
+				togglePause()
 			}
 
 			lastIR = time.Now()
@@ -168,6 +171,28 @@ func (s *squeezebox2) Stop() {
 	binary.BigEndian.PutUint16(msg, uint16(28))
 	msg = append(msg, []byte("strm")...)
 	msg = append(msg, 'q', '1', 'p', '1', '4', '2', '1', 0xff, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 41, 0, 0, 0, 0)
+	fmt.Println(len(msg))
+	s.conn.Write(msg)
+	fmt.Println(hex.Dump(msg))
+}
+
+func (s *squeezebox2) Pause() {
+	// Send the strm command to the Squeezebox
+	msg := make([]byte, 2)
+	binary.BigEndian.PutUint16(msg, uint16(28))
+	msg = append(msg, []byte("strm")...)
+	msg = append(msg, 'p', '1', 'p', '1', '4', '2', '1', 0xff, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 41, 0, 0, 0, 0)
+	fmt.Println(len(msg))
+	s.conn.Write(msg)
+	fmt.Println(hex.Dump(msg))
+}
+
+func (s *squeezebox2) Unpause() {
+	// Send the strm command to the Squeezebox
+	msg := make([]byte, 2)
+	binary.BigEndian.PutUint16(msg, uint16(28))
+	msg = append(msg, []byte("strm")...)
+	msg = append(msg, 'u', '1', 'p', '1', '4', '2', '1', 0xff, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 41, 0, 0, 0, 0)
 	fmt.Println(len(msg))
 	s.conn.Write(msg)
 	fmt.Println(hex.Dump(msg))

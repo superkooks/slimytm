@@ -13,6 +13,7 @@ import (
 var queue []*gabs.Container
 var queueIndex int
 var playing bool
+var paused bool
 var elapsedSeconds int
 var queueLock = new(sync.Mutex)
 
@@ -68,4 +69,13 @@ func previousSong() {
 	queueLock.Unlock()
 
 	players[playingClient].Play(queue[queueIndex].Path("videoId").Data().(string))
+}
+
+func togglePause() {
+	if paused {
+		players[playingClient].Unpause()
+	} else {
+		players[playingClient].Pause()
+	}
+	paused = !paused
 }
