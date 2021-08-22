@@ -115,13 +115,13 @@ func udpListener() {
 
 		fmt.Println("Responding to discovery request from", remote.String())
 		encoder := charmap.ISO8859_10.NewEncoder()
-		resp, err := encoder.String("SuperKooks")
+		resp, err := encoder.String("SlimYTM")
 		if err != nil {
 			panic(err)
 		}
 		resp = "D" + resp
 
-		listener.WriteTo(append([]byte(resp), 0, 0, 0, 0, 0, 0, 0), remote)
+		listener.WriteTo(append([]byte(resp), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), remote)
 	}
 
 }
