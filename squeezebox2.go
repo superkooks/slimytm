@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -34,7 +35,7 @@ func (s *squeezebox2) Listener() {
 	f.Close()
 
 	// Display init message
-	s.DisplayText("SlimYTM")
+	s.DisplayText("SlimYTM", context.Background())
 	s.render()
 	time.Sleep(time.Second * 2)
 
@@ -79,13 +80,17 @@ func (s *squeezebox2) Listener() {
 			if irCode == "7689807f" {
 				// Volume UP
 				s.SetVolume(s.volume + 5)
-				s.DisplayText(fmt.Sprintf("Volume = %v/100", s.volume))
-				textDelay = time.Second * 2
+				textStack = append(textStack, text{
+					text:   fmt.Sprintf("Volume = %v/100", s.volume),
+					expiry: time.Now().Add(time.Second * 2),
+				})
 			} else if irCode == "768900ff" {
 				// Volume DOWN
 				s.SetVolume(s.volume - 5)
-				s.DisplayText(fmt.Sprintf("Volume = %v/100", s.volume))
-				textDelay = time.Second * 2
+				textStack = append(textStack, text{
+					text:   fmt.Sprintf("Volume = %v/100", s.volume),
+					expiry: time.Now().Add(time.Second * 2),
+				})
 			} else if irCode == "7689a05f" && time.Since(lastIR) > time.Second {
 				// NEXT Song
 				nextSong()
@@ -102,7 +107,7 @@ func (s *squeezebox2) Listener() {
 	}
 }
 
-func (s *squeezebox2) DisplayText(text string) {
+func (s *squeezebox2) DisplayText(text string, ctx context.Context) {
 	if len(text) > 40 {
 		// Scroll text across screen
 		text += "  "
@@ -111,7 +116,7 @@ func (s *squeezebox2) DisplayText(text string) {
 			s.setChar(s.font.getChar(int(v)), k*8, variableFrame)
 		}
 
-		go s.scrollBuffer(variableFrame)
+		go s.scrollBuffer(variableFrame, ctx)
 	} else {
 		for k, v := range text {
 			// Set each character individually with an offset
@@ -262,31 +267,40 @@ func (s *squeezebox2) render() {
 	s.framebuffer = make([]byte, 1280)
 }
 
-func (s *squeezebox2) scrollBuffer(varBuffer []byte) {
-	// Display intial 40 chars
-	s.framebuffer = varBuffer[:1280]
-	s.render()
-	time.Sleep(time.Second * 3)
+func (s *squeezebox2) scrollBuffer(varBuffer []byte, ctx context.Context) {
+	for {
+		// Display intial 40 chars
+		s.framebuffer = varBuffer[:1280]
+		s.render()
 
-	// Scroll text across until we reach the start
-	for i := 0; i < len(varBuffer); i += 12 {
-		if i > len(varBuffer)-1280 {
-			// Current frame overlaps end of buffer
-			s.framebuffer = varBuffer[i:]
-			s.framebuffer = append(s.framebuffer, varBuffer[0:1280+i-len(varBuffer)]...)
-		} else {
-			s.framebuffer = varBuffer[i : i+1280]
+		// Sleep for 3 seconds
+		select {
+		case <-time.After(time.Second * 3):
+		case <-ctx.Done():
+			// Exit if we have been cancelled (by twitter)
+			return
 		}
 
-		// Animate at 30 fps
-		s.render()
-		time.Sleep(time.Millisecond * 33)
-	}
+		// Scroll text across until we reach the start
+		for i := 0; i < len(varBuffer); i += 12 {
+			if i > len(varBuffer)-1280 {
+				// Current frame overlaps end of buffer
+				s.framebuffer = varBuffer[i:]
+				s.framebuffer = append(s.framebuffer, varBuffer[0:1280+i-len(varBuffer)]...)
+			} else {
+				s.framebuffer = varBuffer[i : i+1280]
+			}
 
-	// Display the first frame for another second
-	s.framebuffer = varBuffer[:1280]
-	s.render()
-	time.Sleep(time.Second)
+			// Animate at 30 fps
+			s.render()
+			select {
+			case <-time.After(time.Millisecond * 33):
+			case <-ctx.Done():
+				// Exit if we have been cancelled (by twitter)
+				return
+			}
+		}
+	}
 }
 
 func (s *squeezebox2) setChar(chr []byte, offset int, buffer []byte) {

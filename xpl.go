@@ -92,7 +92,6 @@ func xplListener() {
 
 		x := parseXPL(string(b[:n]))
 		if x.schema == "osd.basic" {
-			displayAllPlayers(x.body["text"])
 			delay, ok := x.body["delay"]
 			if !ok {
 				delay = "5"
@@ -103,7 +102,10 @@ func xplListener() {
 				panic("can't convert delay to integer")
 			}
 
-			textDelay = time.Second * time.Duration(d)
+			textStack = append(textStack, text{
+				text:   x.body["text"],
+				expiry: time.Now().Add(time.Second * time.Duration(d)),
+			})
 		}
 	}
 }

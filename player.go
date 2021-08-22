@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
@@ -13,7 +14,7 @@ import (
 type player interface {
 	GetModel() int
 	Listener()
-	DisplayText(text string)
+	DisplayText(text string, ctx context.Context)
 
 	Play(videoID string)
 	Stop()
@@ -25,13 +26,18 @@ type player interface {
 	Unpause()
 }
 
+type text struct {
+	text   string
+	expiry time.Time
+}
+
 const (
 	AUDIO_PRELOAD    = 10 // Seconds of audio to load before playing
 	VOLUME_INCREMENT = 5
 )
 
 var players []player
-var textDelay time.Duration
+var textStack []text
 var lastIR time.Time
 
 func tcpListener() {
@@ -120,25 +126,52 @@ func udpListener() {
 
 }
 
-func displayAllPlayers(text string) {
-	for _, p := range players {
-		p.DisplayText(text)
-	}
-}
-
 func startSqueezebox() {
 	go udpListener()
 	go tcpListener()
 
+	var currentText text
+	var cancel context.CancelFunc
+	var checkStack bool
 	for {
-		if textDelay <= 0 {
+		if len(textStack) == 0 {
+			h, m, sec := time.Now().Local().Clock()
 			for _, p := range players {
-				h, m, sec := time.Now().Local().Clock()
-				p.DisplayText(fmt.Sprintf("                %02d:%02d:%02d", h, m, sec))
+				p.DisplayText(fmt.Sprintf("                %02d:%02d:%02d", h, m, sec), context.Background())
+			}
+		} else {
+			if time.Until(currentText.expiry) > 0 && !checkStack {
+				// Watch the stack for new text
+				if textStack[len(textStack)-1].text != currentText.text {
+					// If we find new text, then cancel the current text and display the new text
+					cancel()
+					checkStack = true
+					continue
+				}
+			} else {
+				checkStack = false
+				currentText = textStack[len(textStack)-1]
+				for time.Since(currentText.expiry) > 0 {
+					// Don't display text that has expired
+					textStack = textStack[:len(textStack)-1]
+					if len(textStack) == 0 {
+						break
+					}
+					currentText = textStack[len(textStack)-1]
+				}
+
+				if len(textStack) == 0 {
+					continue
+				}
+
+				var ctx context.Context
+				ctx, cancel = context.WithTimeout(context.Background(), time.Until(currentText.expiry))
+				for _, p := range players {
+					p.DisplayText(currentText.text, ctx)
+				}
 			}
 		}
 
 		time.Sleep(time.Millisecond * 100)
-		textDelay -= time.Millisecond * 100
 	}
 }
