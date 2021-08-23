@@ -14,6 +14,7 @@ import (
 type player interface {
 	GetModel() int
 	Listener()
+	DisplayClock()
 	DisplayText(text string, ctx context.Context)
 
 	Play(videoID string)
@@ -135,9 +136,8 @@ func startSqueezebox() {
 	var checkStack bool
 	for {
 		if len(textStack) == 0 {
-			h, m, sec := time.Now().Local().Clock()
 			for _, p := range players {
-				p.DisplayText(fmt.Sprintf("                %02d:%02d:%02d", h, m, sec), context.Background())
+				p.DisplayClock()
 			}
 		} else {
 			if time.Until(currentText.expiry) > 0 && !checkStack {

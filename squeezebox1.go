@@ -108,6 +108,11 @@ func (s *squeezebox1) Listener() {
 	}
 }
 
+func (s *squeezebox1) DisplayClock() {
+	h, m, sec := time.Now().Local().Clock()
+	s.DisplayText(fmt.Sprintf("                %02d:%02d:%02d", h, m, sec), context.Background())
+}
+
 func (s *squeezebox1) DisplayText(text string, ctx context.Context) {
 	if len(text) > 35 {
 		// Scroll text across screen
@@ -322,11 +327,10 @@ func (s *squeezebox1) setChar(chr []byte, offset int, buffer []byte) {
 	// Set the chr in the framebuffer
 	i := 2 * offset * 8
 	for col := 0; col < 8; col++ {
-		for k := range chr {
-			v := chr[len(chr)-1-(k+8)%16]
+		for _, v := range chr {
 			mask := byte(0b10000000 >> col)
 			if v&mask > 0 {
-				squeezeMask := byte(1 << (i % 8))
+				squeezeMask := byte(1 << (7 - i%8))
 				buffer[i/8] |= squeezeMask
 			}
 
