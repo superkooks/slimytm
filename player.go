@@ -29,6 +29,7 @@ type player interface {
 
 type text struct {
 	text   string
+	note   string
 	expiry time.Time
 }
 
@@ -39,6 +40,7 @@ const (
 
 var players []player
 var textStack []text
+var checkStack bool
 var lastIR time.Time
 
 func tcpListener() {
@@ -133,9 +135,14 @@ func startSqueezebox() {
 
 	var currentText text
 	var cancel context.CancelFunc
-	var checkStack bool
 	for {
 		if len(textStack) == 0 {
+			// Just in case
+			if cancel != nil {
+				cancel()
+			}
+
+			// Display the clock
 			for _, p := range players {
 				p.DisplayClock()
 			}
@@ -144,7 +151,10 @@ func startSqueezebox() {
 				// Watch the stack for new text
 				if textStack[len(textStack)-1].text != currentText.text {
 					// If we find new text, then cancel the current text and display the new text
-					cancel()
+					if cancel != nil {
+						cancel()
+					}
+
 					checkStack = true
 					continue
 				}
@@ -158,6 +168,10 @@ func startSqueezebox() {
 						break
 					}
 					currentText = textStack[len(textStack)-1]
+				}
+
+				if cancel != nil {
+					cancel()
 				}
 
 				if len(textStack) == 0 {

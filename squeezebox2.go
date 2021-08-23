@@ -115,7 +115,7 @@ func (s *squeezebox2) DisplayClock() {
 func (s *squeezebox2) DisplayText(text string, ctx context.Context) {
 	if len(text) > 22 {
 		// Scroll text across screen
-		text += "  "
+		text += "    "
 		variableFrame := make([]byte, 4*16*len(text))
 		for k, v := range text {
 			s.setChar(s.font.getChar(int(v)), k*8, variableFrame)

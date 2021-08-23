@@ -35,6 +35,7 @@ func queueWatcher() {
 					fmt.Println("playing next song")
 					nextSong()
 				} else {
+					resetPlayingText(false)
 					playing = false
 				}
 			}
@@ -48,6 +49,8 @@ func nextSong() {
 	players[playingClient].Stop()
 	if queueIndex >= len(queue)-1 {
 		// Don't run off the end of the queue
+		resetPlayingText(false)
+		playing = false
 		return
 	}
 
@@ -57,6 +60,7 @@ func nextSong() {
 	queueLock.Unlock()
 
 	players[playingClient].Play(queue[queueIndex].Path("videoId").Data().(string))
+	resetPlayingText(true)
 }
 
 func previousSong() {
@@ -69,6 +73,7 @@ func previousSong() {
 	queueLock.Unlock()
 
 	players[playingClient].Play(queue[queueIndex].Path("videoId").Data().(string))
+	resetPlayingText(true)
 }
 
 func togglePause() {
@@ -78,4 +83,30 @@ func togglePause() {
 		players[playingClient].Pause()
 	}
 	paused = !paused
+	playing = !playing
+}
+
+func resetPlayingText(set bool) {
+	// Clear text stack of currently playing text
+	for k, v := range textStack {
+		fmt.Println(v.text)
+		if v.note == "playing" {
+			textStack = append(textStack[:k], textStack[k+1:]...)
+			break
+		}
+	}
+	checkStack = true
+
+	if set {
+		// Set currently playing text
+		song := queue[queueIndex].Path("title").String()
+		artist := queue[queueIndex].Path("artists.0.name").String()
+		album := queue[queueIndex].Path("album.name").String()
+		textStack = append(textStack, text{
+			text:   fmt.Sprintf("%v from %v by %v", song, album, artist),
+			note:   "playing",
+			expiry: time.Now().Add(time.Hour), // Effectively never expire, we will clear ourselves
+		})
+	}
+	fmt.Println(textStack)
 }
