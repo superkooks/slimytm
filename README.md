@@ -13,5 +13,5 @@ It should discover the SlimYTM server and prompt you to select it as the server.
 
 To select music to play, visit the web interface at `http://localhost:9000` (or where your server is)
 
-Note: SlimYTM listens on both port 9000 and 9001. The xPL listener also uses port 3865.
-To communicate with the Squeezebox, SlimYTM uses port 3483.
+Note: SlimYTM listens on both TCP ports 9000 and 9001. The xPL listener also uses UDP port 3865.
+To communicate with the Squeezebox, SlimYTM uses TCP and UDP port 3483.
