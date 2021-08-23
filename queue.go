@@ -86,10 +86,21 @@ func togglePause() {
 	playing = !playing
 }
 
+func resetQueue() {
+	players[playingClient].Stop()
+	queueLock.Lock()
+	queue = []*gabs.Container{}
+	queueIndex = 0
+	playing = false
+	paused = false
+	elapsedSeconds = 0
+	queueLock.Unlock()
+	resetPlayingText(false)
+}
+
 func resetPlayingText(set bool) {
 	// Clear text stack of currently playing text
 	for k, v := range textStack {
-		fmt.Println(v.text)
 		if v.note == "playing" {
 			textStack = append(textStack[:k], textStack[k+1:]...)
 			break
@@ -108,5 +119,4 @@ func resetPlayingText(set bool) {
 			expiry: time.Now().Add(time.Hour), // Effectively never expire, we will clear ourselves
 		})
 	}
-	fmt.Println(textStack)
 }

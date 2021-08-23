@@ -106,6 +106,9 @@ func (s *squeezebox1) Listener() {
 			} else if irCode == "768920df" {
 				// PAUSE/UNPAUSE Song
 				togglePause()
+			} else if irCode == "768940bf" {
+				// RESET Queue
+				resetQueue()
 			}
 
 			lastIR = time.Now()
