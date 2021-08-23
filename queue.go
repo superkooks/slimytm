@@ -64,6 +64,11 @@ func nextSong() {
 }
 
 func previousSong() {
+	if queueIndex == 0 {
+		// Don't run off the end of the queue
+		return
+	}
+
 	players[playingClient].Stop()
 
 	queueLock.Lock()
