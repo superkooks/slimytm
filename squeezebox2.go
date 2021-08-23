@@ -63,6 +63,11 @@ func (s *squeezebox2) Listener() {
 			fmt.Println("********** STAT", string(b[8:12]))
 
 		} else if string(b[:4]) == "IR  " {
+			if time.Since(lastIR) < IR_INTERVAL {
+				// Prevent duplicate IR commands from ruining our day
+				continue
+			}
+
 			// IR command from the remote
 			irCode := hex.EncodeToString(b[14:18])
 			fmt.Println("IR Code", irCode)
@@ -91,13 +96,13 @@ func (s *squeezebox2) Listener() {
 					text:   fmt.Sprintf("Volume = %v/100", s.volume),
 					expiry: time.Now().Add(time.Second * 2),
 				})
-			} else if irCode == "7689a05f" && time.Since(lastIR) > time.Second {
+			} else if irCode == "7689a05f" {
 				// NEXT Song
 				nextSong()
-			} else if irCode == "7689c03f" && time.Since(lastIR) > time.Second {
+			} else if irCode == "7689c03f" {
 				// PREVIOUS Song
 				previousSong()
-			} else if irCode == "768920df" && time.Since(lastIR) > time.Second {
+			} else if irCode == "768920df" {
 				// PAUSE/UNPAUSE Song
 				togglePause()
 			}
