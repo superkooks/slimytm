@@ -14,6 +14,8 @@ import (
 type player interface {
 	GetModel() int
 	Listener()
+	Heartbeat()
+
 	DisplayClock()
 	DisplayText(text string, ctx context.Context)
 
@@ -34,9 +36,10 @@ type text struct {
 }
 
 const (
-	AUDIO_PRELOAD    = 10 // Seconds of audio to load before playing
-	VOLUME_INCREMENT = 5
-	IR_INTERVAL      = 300 * time.Millisecond // Prevents duplicate IR commands from ruining our day
+	AUDIO_PRELOAD      = 10 // Seconds of audio to load before playing
+	VOLUME_INCREMENT   = 5
+	IR_INTERVAL        = 300 * time.Millisecond // Prevents duplicate IR commands from ruining our day
+	HEARTBEAT_INTERVAL = time.Second * 20       // Interval to request heartbeats at
 )
 
 var players []player
@@ -92,6 +95,7 @@ func tcpListener() {
 
 		players = append(players, c)
 		go c.Listener()
+		go c.Heartbeat()
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -45,8 +46,20 @@ func (s *squeezebox1) Listener() {
 	// Start receiving messages
 	for {
 		b := make([]byte, 1024)
+		s.conn.SetReadDeadline(time.Now().Add(HEARTBEAT_INTERVAL * 3))
 		n, err := s.conn.Read(b)
-		if err != nil {
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			// Client has timed out, remove it from available players
+			for k, v := range players {
+				if v == s {
+					players = append(players[:k], players[k+1:]...)
+				}
+			}
+
+			fmt.Println("**** Client has timed out")
+			s.conn.Close()
+			return
+		} else if err != nil {
 			panic(err)
 		}
 
@@ -113,6 +126,26 @@ func (s *squeezebox1) Listener() {
 
 			lastIR = time.Now()
 		}
+	}
+}
+
+func (s *squeezebox1) Heartbeat() {
+	for {
+		// Send the strm t command to request status
+		msg := make([]byte, 2)
+		binary.BigEndian.PutUint16(msg, uint16(28))
+		msg = append(msg, []byte("strm")...)
+		msg = append(msg, 't', '0', 'm', '?', '?', '?', '?', 0, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 41, 0, 0, 0, 0)
+		fmt.Println(len(msg))
+		fmt.Println(hex.Dump(msg))
+		_, err := s.conn.Write(msg)
+		if err != nil {
+			// Client probably dropped conn
+			fmt.Println("**** Heartbeat err:", err)
+			return
+		}
+
+		time.Sleep(HEARTBEAT_INTERVAL)
 	}
 }
 
