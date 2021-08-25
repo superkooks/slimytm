@@ -122,6 +122,32 @@ func (s *squeezebox1) Listener() {
 			} else if irCode == "768940bf" {
 				// RESET Queue
 				resetQueue()
+			} else if irCode == "7689f00f" {
+				// CYCLE Current Player
+
+				// Loop around the list of players
+				resetQueue()
+				if playingClient == len(players)-1 {
+					playingClient = 0
+				} else {
+					playingClient++
+				}
+
+				// Display text for all players
+				textStack = append(textStack, text{
+					text:   fmt.Sprintf("Selected player %v", playingClient),
+					expiry: time.Now().Add(time.Second * 3),
+				})
+
+				// Wait until text stack picks it up
+				time.Sleep(time.Millisecond * 100)
+
+				// Overwrite the text
+				ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+				players[playingClient].DisplayText("Selected this player", ctx)
+
+				// Defer to ignore warning, should never be called
+				defer cancel()
 			}
 
 			lastIR = time.Now()
