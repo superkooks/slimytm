@@ -47,7 +47,9 @@ const store = Vuex.createStore({
                 { id: "LM", title: "Your Likes", count: "Some", thumbnail: "https://www.gstatic.com/youtube/media/ytm/images/pbg/liked-songs-@576.png" },
             ],
             currentPlaylist: {},
-            currentSong: {}
+            currentSong: {},
+            paused: false,
+            volume: 50,
         }
     },
 
@@ -58,8 +60,10 @@ const store = Vuex.createStore({
         setCurrentPlaylist(state, list) {
             state.currentPlaylist = list
         },
-        setCurrentSong(state, song) {
-            state.currentSong = song
+        setPlayerState(state, player) {
+            state.currentSong = player.song
+            state.paused = player.paused
+            state.volume = player.volume
         }
     },
     actions: {
@@ -88,7 +92,6 @@ const store = Vuex.createStore({
             }).catch(() => {
                 console.log("failed to play song")
             })
-            context.commit("setCurrentSong", e.song)
         },
     }
 })
@@ -133,7 +136,7 @@ app.component("song", {
 
 app.component("player-controls", {
     template: `<hr>
-    <div id="playerControls" v-if="Object.entries($store.state.currentSong).length !== 0">
+    <div id="playerControls" v-if="Object.keys($store.state.currentSong).length > 0">
     <div id="playerControlButtons">
         <svg class="playButton" viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet">
             <g class="style-scope tp-yt-iron-icon">
@@ -142,7 +145,7 @@ app.component("player-controls", {
         </svg>
     </div>
     <div id="currentSong">
-        <img class="thumbnail" @click="playSong" :src="$store.state.currentSong.thumbnails[0].url">
+        <img class="thumbnail" :src="$store.state.currentSong.thumbnails[0].url">
         <div id="currentSongInfo">
             <span class="title">{{ $store.state.currentSong.title }}</span>
             <p>
@@ -154,7 +157,23 @@ app.component("player-controls", {
     </div>
     <div id="playerVolume">
     </div>
-</div>`
+</div>`,
+
+    created() {
+        // Connect to the websocket to listen for events
+        console.log("Connecting to websocket")
+        ws = new WebSocket("ws://"+window.location.hostname+":9001/ws")
+
+        ws.onmessage = (event) => {
+            e = JSON.parse(event.data)
+            console.log(e)
+            this.$store.commit("setPlayerState", e)
+        }
+
+        ws.onopen = () => {
+            console.log("Connected to websocket")
+        }
+    }
 })
 
 app.mount("#app")

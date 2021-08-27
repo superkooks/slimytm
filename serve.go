@@ -6,9 +6,11 @@ import (
 	"io"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/Jeffail/gabs/v2"
 	"github.com/gorilla/mux"
+	"github.com/gorilla/websocket"
 )
 
 type audioBufferWrapper struct {
@@ -41,6 +43,12 @@ func (b *audioBufferWrapper) Reset() {
 }
 
 var audioBuffer = new(audioBufferWrapper)
+var webClients []*websocket.Conn
+var upgrader = websocket.Upgrader{
+	CheckOrigin:     func(r *http.Request) bool { return true },
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+}
 
 func playSongs(w http.ResponseWriter, r *http.Request) {
 	body, err := gabs.ParseJSONBuffer(r.Body)
@@ -91,21 +99,40 @@ func playSongs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func currentSong(w http.ResponseWriter, r *http.Request) {
-	queueLock.Lock()
-	if queueIndex < len(queue) && len(queue) > 0 {
-		w.Write([]byte(queue[queueIndex].String()))
-	} else {
-		w.Write([]byte("{}"))
-	}
-	queueLock.Unlock()
-}
-
 func audio(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("****** New audio request")
 	fmt.Println("Buffer is currently", audioBuffer.Len(), "bytes long")
 	fmt.Println("     =", audioBuffer.Len()/48000/2/2, "s")
 	io.Copy(w, audioBuffer)
+}
+
+func ws(w http.ResponseWriter, r *http.Request) {
+	// Upgrade the connection to ws
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	// Add the client to our list
+	webClients = append(webClients, conn)
+
+	// Set the close handler on the ws connection
+	conn.SetCloseHandler(func(code int, text string) error {
+		// Boilerplate close handler
+		message := websocket.FormatCloseMessage(code, "")
+		conn.WriteControl(websocket.CloseMessage, message, time.Now().Add(time.Second))
+
+		// Remove the client from our list
+		for k, v := range webClients {
+			if v == conn {
+				webClients = append(webClients[:k], webClients[k+1:]...)
+			}
+		}
+
+		return nil
+	})
+
+	conn.WriteMessage(websocket.TextMessage, getCurrentSong())
 }
 
 func corsMiddleware(next http.Handler) http.Handler {
@@ -131,8 +158,8 @@ func main() {
 	r := mux.NewRouter()
 	r.Use(corsMiddleware)
 	r.Path("/play").HandlerFunc(playSongs)
-	r.Path("/currentsong").HandlerFunc(currentSong)
 	r.Path("/assets/audio.wav").HandlerFunc(audio)
+	r.Path("/ws").HandlerFunc(ws)
 
 	// f, _ := os.Open("wa.wav")
 	// n, err := io.Copy(audioAssetsBytes, f)

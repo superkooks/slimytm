@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Jeffail/gabs/v2"
+	"github.com/gorilla/websocket"
 )
 
 var queue []*gabs.Container
@@ -45,7 +46,25 @@ func queueWatcher() {
 	}
 }
 
+// Returns the JSON representation of the current song
+func getCurrentSong() []byte {
+	queueLock.Lock()
+	defer queueLock.Unlock()
+
+	var song string
+	if queueIndex < len(queue) && len(queue) > 0 && playing {
+		song = queue[queueIndex].String()
+	} else {
+		song = "{}"
+	}
+
+	return []byte(fmt.Sprintf(`{"song": %v, "paused": %v, "volume": %v}`,
+		song, paused, players[playingClient].GetVolume(),
+	))
+}
+
 func nextSong() {
+	defer updateWebClients()
 	players[playingClient].Stop()
 	if queueIndex >= len(queue)-1 {
 		// Don't run off the end of the queue
@@ -64,6 +83,7 @@ func nextSong() {
 }
 
 func previousSong() {
+	defer updateWebClients()
 	if queueIndex == 0 {
 		// Don't run off the end of the queue
 		return
@@ -82,6 +102,7 @@ func previousSong() {
 }
 
 func togglePause() {
+	defer updateWebClients()
 	if paused {
 		players[playingClient].Unpause()
 	} else {
@@ -92,6 +113,7 @@ func togglePause() {
 }
 
 func resetQueue() {
+	defer updateWebClients()
 	players[playingClient].Stop()
 	queueLock.Lock()
 	queue = []*gabs.Container{}
@@ -123,5 +145,12 @@ func resetPlayingText(set bool) {
 			note:   "playing",
 			expiry: time.Now().Add(time.Hour), // Effectively never expire, we will clear ourselves
 		})
+	}
+}
+
+func updateWebClients() {
+	s := getCurrentSong()
+	for _, v := range webClients {
+		v.WriteMessage(websocket.TextMessage, s)
 	}
 }
