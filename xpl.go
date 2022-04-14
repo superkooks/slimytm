@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strconv"
@@ -102,10 +103,13 @@ func xplListener() {
 				panic("can't convert delay to integer")
 			}
 
-			textStack = append(textStack, text{
-				text:   x.body["text"],
-				expiry: time.Now().Add(time.Second * time.Duration(d)),
-			})
+			for _, v := range queues {
+				ctx, _ := context.WithTimeout(context.Background(), time.Second*time.Duration(d))
+				v.Texts = append(v.Texts, text{
+					bufs: v.Player.DisplayText(x.body["text"], ctx),
+					ctx:  ctx,
+				})
+			}
 		}
 	}
 }

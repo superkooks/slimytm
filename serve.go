@@ -1,111 +1,64 @@
 package main
 
 import (
-	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"sync"
 	"time"
 
-	"github.com/Jeffail/gabs/v2"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 )
 
-type audioBufferWrapper struct {
-	b bytes.Buffer
-	m sync.Mutex
-}
-
-func (b *audioBufferWrapper) Read(p []byte) (n int, err error) {
-	b.m.Lock()
-	defer b.m.Unlock()
-	return b.b.Read(p)
-}
-
-func (b *audioBufferWrapper) Write(p []byte) (n int, err error) {
-	b.m.Lock()
-	defer b.m.Unlock()
-	return b.b.Write(p)
-}
-
-func (b *audioBufferWrapper) Len() int {
-	b.m.Lock()
-	defer b.m.Unlock()
-	return b.b.Len()
-}
-
-func (b *audioBufferWrapper) Reset() {
-	b.m.Lock()
-	defer b.m.Unlock()
-	b.b.Reset()
-}
-
-var audioBuffer = new(audioBufferWrapper)
-var webClients []*websocket.Conn
 var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 }
 
-func playSongs(w http.ResponseWriter, r *http.Request) {
-	body, err := gabs.ParseJSONBuffer(r.Body)
+// Handle players downloading audio
+func audio(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+
+	for _, v := range queues {
+		if fmt.Sprint(v.Player.GetID()) == vars["id"] {
+			fmt.Println("****** New audio request")
+			fmt.Println("Buffer is currently", v.Buffer.Len(), "bytes long")
+			fmt.Println("     =", v.Buffer.Len()/48000/2/2, "s")
+			io.Copy(w, v.Buffer)
+			return
+		}
+	}
+}
+
+// Handle clients getting all the players
+func getPlayers(w http.ResponseWriter, r *http.Request) {
+	// Inlining a struct seems like the simplest solution
+	type resp struct {
+		ID int `json:"id"`
+		// Name string `json:"name"`
+		Type string `json:"type"`
+		// Thumbnail string `json:"thumbnail"`
+	}
+
+	var out []resp
+	for _, v := range queues {
+		out = append(out, resp{
+			ID:   v.Player.GetID(),
+			Type: v.Player.GetModel(),
+		})
+	}
+
+	b, err := json.Marshal(out)
 	if err != nil {
 		panic(err)
 	}
-	r.Body.Close()
 
-	// Add the start song to the queue
-	queueLock.Lock()
-	startSong := body.Path("startSong")
-	queue = []*gabs.Container{startSong}
-	queueIndex = -1
-	queueLock.Unlock()
-	nextSong()
-
-	// Retrieve the rest of the songs and enqueue them
-	queueType := body.Path("queueType").Data().(string)
-	queueID := body.Path("queueId").Data().(string)
-
-	switch queueType {
-	case "playlist":
-		resp, err := http.Get("http://localhost:9000/api/playlist/" + queueID)
-		if err != nil {
-			panic(err)
-		}
-
-		playlist, err := gabs.ParseJSONBuffer(resp.Body)
-		if err != nil {
-			panic(err)
-		}
-
-		queueLock.Lock()
-		queue = playlist.Path("tracks").Children()
-		for k, v := range queue {
-			// Set the queue index to the start song
-			if body.Path("startSong.videoId").Data().(string) == v.Path("videoId").Data().(string) {
-				queueIndex = k
-			}
-		}
-
-		fmt.Println("index @", queueIndex)
-		fmt.Println("length:", len(queue))
-		// fmt.Println("next song:", queue[queueIndex+1].Path("title").String())
-		queueLock.Unlock()
-	default:
-		panic("unknown queue type")
-	}
+	w.Write(b)
 }
 
-func audio(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("****** New audio request")
-	fmt.Println("Buffer is currently", audioBuffer.Len(), "bytes long")
-	fmt.Println("     =", audioBuffer.Len()/48000/2/2, "s")
-	io.Copy(w, audioBuffer)
-}
-
+// Handle the websocket connection from any client
 func ws(w http.ResponseWriter, r *http.Request) {
 	// Upgrade the connection to ws
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -114,7 +67,8 @@ func ws(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Add the client to our list
-	webClients = append(webClients, conn)
+	c := &Client{Conn: conn}
+	clients = append(clients, c)
 
 	// Set the close handler on the ws connection
 	conn.SetCloseHandler(func(code int, text string) error {
@@ -123,18 +77,24 @@ func ws(w http.ResponseWriter, r *http.Request) {
 		conn.WriteControl(websocket.CloseMessage, message, time.Now().Add(time.Second))
 
 		// Remove the client from our list
-		for k, v := range webClients {
-			if v == conn {
-				webClients = append(webClients[:k], webClients[k+1:]...)
+		for k, v := range clients {
+			if v == c {
+				clients = append(clients[:k], clients[k+1:]...)
 			}
 		}
 
 		return nil
 	})
 
-	conn.WriteMessage(websocket.TextMessage, getCurrentSong())
+	// Update the client with all player states
+	for _, v := range queues {
+		v.UpdateClients()
+	}
+
+	go c.Listener()
 }
 
+// A middleware to cope for any CORS requests
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Access-Control-Allow-Origin", "*")
@@ -147,9 +107,10 @@ func corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// Entrypoint
 func main() {
-	go startSqueezebox()
-	go queueWatcher()
+	go udpListener()
+	go tcpListener()
 
 	xplInit()
 	go xplListener()
@@ -157,8 +118,8 @@ func main() {
 	fmt.Println("Serving api on :9001")
 	r := mux.NewRouter()
 	r.Use(corsMiddleware)
-	r.Path("/play").HandlerFunc(playSongs)
-	r.Path("/assets/audio.wav").HandlerFunc(audio)
+	r.Path("/players").HandlerFunc(getPlayers)
+	r.Path("/player/{id}/audio.wav").HandlerFunc(audio)
 	r.Path("/ws").HandlerFunc(ws)
 
 	// f, _ := os.Open("wa.wav")

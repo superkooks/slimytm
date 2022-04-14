@@ -1,4 +1,15 @@
 const Home = {
+    template: `<div id="players" class="routerView">
+    <p style="font-weight: bold">Choose a player</p>
+    <player
+        v-for="player in $store.state.players"
+        :player="player"
+        :key="player.id"
+    ></player>
+</div>`
+}
+
+const PlayerHome = {
     template: `<div id="playlists" class="routerView">
     <playlist-cover
         v-for="playlist in $store.state.playlists"
@@ -28,77 +39,22 @@ const Playlist = {
 </div>`,
 
     created() {
-        this.$store.commit("setCurrentPlaylist", { title: "Loading...", trackCount: "0", duration: "0 seconds", songs: [] })
+        this.$store.commit("currentPlaylist", { title: "Loading...", trackCount: "0", duration: "0 seconds", songs: [] })
 
         this.$store.dispatch("getPlaylist", this.$route.params.id)
     },
     
     methods: {
         playSong(event) {
-            this.$store.dispatch("playSong", {playlist: this.$store.state.currentPlaylist, song: event})
+            this.$store.dispatch("playSong", {player: Number(this.$route.params.player), playlist: this.$store.state.currentPlaylist, song: event})
         }
     }
 }
 
-const store = Vuex.createStore({
-    state() {
-        return {
-            playlists: [
-                { id: "LM", title: "Your Likes", count: "Some", thumbnail: "https://www.gstatic.com/youtube/media/ytm/images/pbg/liked-songs-@576.png" },
-            ],
-            currentPlaylist: {},
-            currentSong: {},
-            paused: false,
-            volume: 50,
-        }
-    },
-
-    mutations: {
-        setPlaylists(state, playlists) {
-            state.playlists = playlists
-        },
-        setCurrentPlaylist(state, list) {
-            state.currentPlaylist = list
-        },
-        setPlayerState(state, player) {
-            state.currentSong = player.song
-            state.paused = player.paused
-            state.volume = player.volume
-        }
-    },
-    actions: {
-        updatePlaylists(context) {
-            fetch("/api/library/playlists").then((resp) => {
-                return resp.json()
-            }).then((resp) => {
-                context.commit("setPlaylists", resp)
-            })
-        },
-        getPlaylist(context, id) {
-            fetch("/api/playlist/"+id+"?limit=30").then((resp) => {
-                return resp.json()
-            }).then((resp) => {
-                context.commit("setCurrentPlaylist", resp)
-            })
-        },
-        playSong(context, e) {
-            data = {queueType: "playlist", queueId: e.playlist.id, startSong: e.song}
-            fetch("http://"+window.location.hostname+":9001/play", {
-                method: "POST",
-                body: JSON.stringify(data),
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            }).catch(() => {
-                console.log("failed to play song")
-            })
-        },
-    }
-})
-
 const routes = [
     { path: "/", component: Home },
-    { path: "/playlist/:id", component: Playlist }
+    { path: "/player/:player/", component: PlayerHome },
+    { path: "/player/:player/playlist/:id", component: Playlist }
 ]
 
 const router = VueRouter.createRouter({
@@ -112,9 +68,16 @@ app.config.devtools = true
 app.use(router)
 app.use(store)
 
+app.component("player", {
+    props: ["player"],
+    template: `<div class="player" @click="this.$router.push('/player/'+player.id)">
+    <p>{{ player.type }}</p>
+</div>`
+})
+
 app.component("playlist-cover", {
     props: ["playlist"],
-    template: `<div class="playlistCover" @click="this.$router.push('/playlist/'+playlist.id)">
+    template: `<div class="playlistCover" @click="this.$router.push('/player/'+this.$route.params.player+'/playlist/'+playlist.id)">
     <img :src="playlist.thumbnail">
     <span class="playlistTitle">{{ playlist.title }}</span>
     <span class="playlistCount">{{ playlist.count }} songs</span>
@@ -136,42 +99,90 @@ app.component("song", {
 
 app.component("player-controls", {
     template: `<hr>
-    <div id="playerControls" v-if="Object.keys($store.state.currentSong).length > 0">
+<div id="playerControls" v-if="Object.keys(playerState.song).length > 0 || playerState.loading">
+
     <div id="playerControlButtons">
-        <svg class="playButton" viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet">
-            <g class="style-scope tp-yt-iron-icon">
-                <path d="M8 5v14l11-7z" class="style-scope tp-yt-iron-icon"></path>
-            </g>
-        </svg>
+        <span class="material-icons md-48" @click="$store.dispatch('previousSong', Number($route.params.player))">
+            skip_previous
+        </span>
+        <span class="material-icons md-48" v-if="playerState.paused" @click="$store.dispatch('pauseSong', Number($route.params.player))">
+            play_arrow
+        </span>
+        <span class="material-icons md-48" v-else @click="$store.dispatch('pauseSong', Number($route.params.player))">
+            pause
+        </span>
+        <span class="material-icons md-48" @click="$store.dispatch('nextSong', Number($route.params.player))">
+            skip_next
+        </span>
     </div>
-    <div id="currentSong">
-        <img class="thumbnail" :src="$store.state.currentSong.thumbnails[0].url">
+    
+    <div id="currentSong"
+        v-if="playerState.loading"
+    >
+        <p>Loading...</p>
+    </div>
+
+    <div id="currentSong" v-else>
+        <img class="thumbnail" :src="playerState.song.thumbnails[0].url">
         <div id="currentSongInfo">
-            <span class="title">{{ $store.state.currentSong.title }}</span>
+            <span class="title">{{ playerState.song.title }}</span>
             <p>
-                <span class="artist">{{ $store.state.currentSong.artists[0].name }}</span>
-                <span class="noHover" v-if="$store.state.currentSong.album != null">  -  </span>
-                <span class="album">{{ $store.state.currentSong.album != null ? $store.state.currentSong.album.name : "" }}</span>
+                <span class="artist">{{ playerState.song.artists[0].name }}</span>
+                <span class="noHover" v-if="playerState.song.album != null">  -  </span>
+                <span class="album">{{ playerState.song.album != null ? playerState.song.album.name : "" }}</span>
             </p>
         </div>
     </div>
     <div id="playerVolume">
+        <input type="range" min="0" max="100" step="5" :value="playerState.volume" @input="setVolume">
     </div>
 </div>`,
 
-    created() {
-        // Connect to the websocket to listen for events
+    mounted() {
+        // Connect to the websocket and load current states of players
         console.log("Connecting to websocket")
         ws = new WebSocket("ws://"+window.location.hostname+":9001/ws")
+        this.$store.commit("ws", ws)
 
         ws.onmessage = (event) => {
             e = JSON.parse(event.data)
             console.log(e)
-            this.$store.commit("setPlayerState", e)
+            this.$store.commit("playerState", e)
         }
 
         ws.onopen = () => {
             console.log("Connected to websocket")
+        }
+
+        ws.onerror = () => {
+            this.$store.commit("wsFailed")
+        }
+    },
+
+    methods: {
+        setVolume(event) {
+            this.$store.dispatch("setVolume", {
+                player: Number(this.$route.params.player),
+                volume: Number(event.target.value),
+            })
+        }
+    },
+
+    computed: {
+        playerState() {
+            s = this.$store.getters.playerState(this.$route.params.player)
+
+            if (this.$route.params.player == undefined || s == undefined) {
+                return {
+                    id: 0,
+                    song: {},
+                    paused: false,
+                    loading: false,
+                    volume: 0
+                }
+            }
+
+            return s
         }
     }
 })

@@ -14,14 +14,20 @@ import (
 )
 
 type squeezebox1 struct {
-	conn        *net.TCPConn
-	font        psfFont
-	framebuffer []byte
-	volume      int
+	Queue *Queue
+
+	id     int
+	conn   *net.TCPConn
+	font   psfFont
+	volume int
 }
 
-func (s *squeezebox1) GetModel() int {
-	return 1
+func (s *squeezebox1) GetID() int {
+	return s.id
+}
+
+func (s *squeezebox1) GetModel() string {
+	return "Squeezebox 1"
 }
 
 func (s *squeezebox1) Listener() {
@@ -36,9 +42,11 @@ func (s *squeezebox1) Listener() {
 	f.Close()
 
 	// Display init message
-	s.DisplayText("SlimYTM", context.Background())
-	s.render()
+	ctx, _ := context.WithTimeout(context.Background(), time.Second)
+	buf := <-s.DisplayText("SlimYTM", ctx)
+	s.Render(buf)
 	time.Sleep(time.Second * 2)
+	go s.Queue.Composite()
 
 	// Set the volume to 1/2 intially
 	s.SetVolume(50)
@@ -50,13 +58,13 @@ func (s *squeezebox1) Listener() {
 		n, err := s.conn.Read(b)
 		if errors.Is(err, os.ErrDeadlineExceeded) {
 			// Client has timed out, remove it from available players
-			for k, v := range players {
-				if v == s {
-					players = append(players[:k], players[k+1:]...)
+			for k, v := range queues {
+				if v.Player.GetID() == s.GetID() {
+					queues = append(queues[:k], queues[k+1:]...)
 				}
 			}
 
-			fmt.Println("**** Client has timed out")
+			fmt.Println("**** Player has timed out")
 			s.conn.Close()
 			return
 		} else if err != nil {
@@ -69,11 +77,13 @@ func (s *squeezebox1) Listener() {
 		if string(b[:4]) == "STAT" {
 			// Status message from the squeezebox
 			if string(b[8:12]) == "STMa" {
-				playing = true
+				s.Queue.Playing = true
+				s.Queue.Loading = false
+				s.Queue.UpdateClients()
 			}
 
 			bytesPlayed := int(binary.BigEndian.Uint64(b[23:31])) - int(binary.BigEndian.Uint32(b[19:23]))
-			elapsedSeconds = bytesPlayed / 48000 / 2 / 2
+			s.Queue.ElapsedSecs = bytesPlayed / 48000 / 2 / 2
 			fmt.Println("********** STAT", string(b[8:12]))
 
 		} else if string(b[:4]) == "IR  " {
@@ -99,55 +109,31 @@ func (s *squeezebox1) Listener() {
 			if irCode == "7689807f" {
 				// Volume UP
 				s.SetVolume(s.volume + VOLUME_INCREMENT)
-				textStack = append(textStack, text{
-					text:   fmt.Sprintf("Volume = %v/100", s.volume),
-					expiry: time.Now().Add(time.Second * 2),
+				ctx, _ := context.WithTimeout(context.Background(), time.Second*2)
+				s.Queue.Texts = append(s.Queue.Texts, text{
+					bufs: s.DisplayText(fmt.Sprintf("Volume = %v/100", s.volume), ctx),
+					ctx:  ctx,
 				})
 			} else if irCode == "768900ff" {
 				// Volume DOWN
 				s.SetVolume(s.volume - VOLUME_INCREMENT)
-				textStack = append(textStack, text{
-					text:   fmt.Sprintf("Volume = %v/100", s.volume),
-					expiry: time.Now().Add(time.Second * 2),
+				ctx, _ := context.WithTimeout(context.Background(), time.Second*2)
+				s.Queue.Texts = append(s.Queue.Texts, text{
+					bufs: s.DisplayText(fmt.Sprintf("Volume = %v/100", s.volume), ctx),
+					ctx:  ctx,
 				})
 			} else if irCode == "7689a05f" {
 				// NEXT Song
-				nextSong()
+				s.Queue.Next()
 			} else if irCode == "7689c03f" {
 				// PREVIOUS Song
-				previousSong()
+				s.Queue.Previous()
 			} else if irCode == "768920df" {
 				// PAUSE/UNPAUSE Song
-				togglePause()
+				s.Queue.Pause()
 			} else if irCode == "768940bf" {
 				// RESET Queue
-				resetQueue()
-			} else if irCode == "7689f00f" {
-				// CYCLE Current Player
-
-				// Loop around the list of players
-				resetQueue()
-				if playingClient == len(players)-1 {
-					playingClient = 0
-				} else {
-					playingClient++
-				}
-
-				// Display text for all players
-				textStack = append(textStack, text{
-					text:   fmt.Sprintf("Selected player %v", playingClient),
-					expiry: time.Now().Add(time.Second * 3),
-				})
-
-				// Wait until text stack picks it up
-				time.Sleep(time.Millisecond * 100)
-
-				// Overwrite the text
-				ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
-				players[playingClient].DisplayText("Selected this player", ctx)
-
-				// Defer to ignore warning, should never be called
-				defer cancel()
+				s.Queue.Reset()
 			}
 
 			lastIR = time.Now()
@@ -175,12 +161,29 @@ func (s *squeezebox1) Heartbeat() {
 	}
 }
 
-func (s *squeezebox1) DisplayClock() {
-	h, m, sec := time.Now().Local().Clock()
-	s.DisplayText(fmt.Sprintf("                %02d:%02d:%02d", h, m, sec), context.Background())
+func (s *squeezebox1) DisplayClock() chan []byte {
+	out := make(chan []byte)
+
+	go func() {
+		for {
+			buf := make([]byte, 1280)
+			h, m, sec := time.Now().Local().Clock()
+			for k, v := range fmt.Sprintf("                %02d:%02d:%02d", h, m, sec) {
+				// Set each character individually with an offset
+				s.setChar(s.font.getChar(int(v)), k*8, buf)
+			}
+
+			out <- buf
+		}
+	}()
+
+	return out
 }
 
-func (s *squeezebox1) DisplayText(text string, ctx context.Context) {
+// Return a channel of framebuffers, scrolling the text if needed.
+func (s *squeezebox1) DisplayText(text string, ctx context.Context) chan []byte {
+	out := make(chan []byte)
+
 	if len(text) > 35 {
 		// Scroll text across screen
 		text += "    "
@@ -189,17 +192,29 @@ func (s *squeezebox1) DisplayText(text string, ctx context.Context) {
 			s.setChar(s.font.getChar(int(v)), k*8, variableFrame)
 		}
 
-		go s.scrollBuffer(variableFrame, ctx)
+		go s.scrollBuffer(variableFrame, ctx, out)
 	} else {
+		buf := make([]byte, 560)
 		for k, v := range text {
 			// Set each character individually with an offset
-			s.setChar(s.font.getChar(int(v)), k*8, s.framebuffer)
+			s.setChar(s.font.getChar(int(v)), k*8, buf)
 		}
-		s.render()
+
+		go func() {
+			// Output the framebuffer until the context expires
+			for {
+				select {
+				case <-ctx.Done():
+				case out <- buf:
+				}
+			}
+		}()
 	}
+
+	return out
 }
 
-func (s *squeezebox1) Play(videoID string) {
+func (s *squeezebox1) Play(videoID string) (cancel func()) {
 	// Get the player URL with youtube-dl
 	co := exec.Command("youtube-dl", "https://music.youtube.com/watch?v="+videoID, "-f", "bestaudio[ext=webm]", "-g")
 	fmt.Println(co.String())
@@ -210,10 +225,11 @@ func (s *squeezebox1) Play(videoID string) {
 	}
 
 	// Start FFMPEG with the URL, piping stdout to our audio buffer
-	audioBuffer.Reset()
-	fcmd := exec.Command("ffmpeg", "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5", "-i",
+	s.Queue.Buffer.Reset()
+	ctx, cancel := context.WithCancel(context.Background())
+	fcmd := exec.CommandContext(ctx, "ffmpeg", "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5", "-i",
 		string(b), "-f", "wav", "-ar", "48000", "-ac", "2", "-loglevel", "warning", "-vn", "-")
-	fcmd.Stdout = audioBuffer
+	fcmd.Stdout = s.Queue.Buffer
 	fcmd.Stderr = os.Stderr
 
 	err = fcmd.Start()
@@ -223,13 +239,14 @@ func (s *squeezebox1) Play(videoID string) {
 
 	// Wait until with have at least AUDIO_PRELOAD seconds of audio in our buffer
 	for {
-		if audioBuffer.Len() > 48000*2*2*AUDIO_PRELOAD {
+		time.Sleep(50 * time.Millisecond)
+		if s.Queue.Buffer.Len() > 48000*2*2*AUDIO_PRELOAD {
 			break
 		}
 	}
 
 	// Send the strm command to the Squeezebox
-	header := "GET /assets/audio.wav HTTP/1.0\n\n"
+	header := fmt.Sprintf("GET /player/%v/audio.wav HTTP/1.0\n\n", s.id)
 	msg := make([]byte, 2)
 	binary.BigEndian.PutUint16(msg, uint16(28+len(header)))
 	msg = append(msg, []byte("strm")...)
@@ -238,6 +255,8 @@ func (s *squeezebox1) Play(videoID string) {
 	fmt.Println(len(msg))
 	s.conn.Write(msg)
 	fmt.Println(hex.Dump(msg))
+
+	return cancel
 }
 
 func (s *squeezebox1) Stop() {
@@ -308,8 +327,8 @@ func (s *squeezebox1) GetVolume() int {
 	return s.volume
 }
 
-func (s *squeezebox1) render() {
-	if len(s.framebuffer) != 560 {
+func (s *squeezebox1) Render(buf []byte) {
+	if len(buf) != 560 {
 		panic("framebuffer has incorrect length")
 	}
 
@@ -318,45 +337,49 @@ func (s *squeezebox1) render() {
 	binary.BigEndian.PutUint16(msg, 566)
 	msg = append(msg, []byte("grfd")...)
 	msg = append(msg, 0x02, 0x30)
-	msg = append(msg, s.framebuffer...)
+	msg = append(msg, buf...)
 	s.conn.Write(msg)
-
-	s.framebuffer = make([]byte, 560)
 }
 
-func (s *squeezebox1) scrollBuffer(varBuffer []byte, ctx context.Context) {
+// Displays the whole buffer forever until it cancelled
+func (s *squeezebox1) scrollBuffer(varBuffer []byte, ctx context.Context, out chan []byte) {
 	for {
-		// Display intial 35 chars
-		s.framebuffer = varBuffer[:560]
-		s.render()
+		// Wait until we are being composited before starting the timer
+		out <- make([]byte, 1280)
+		out <- make([]byte, 1280)
+		stationary := time.NewTimer(time.Second * 3)
 
-		// Sleep for 3 seconds
-		select {
-		case <-time.After(time.Second * 3):
-		case <-ctx.Done():
-			// Exit if we have been cancelled (by twitter)
-			return
-		}
-
-		// Scroll text across until we reach the start
-		for i := 0; i < len(varBuffer); i += 6 {
-			if i > len(varBuffer)-560 {
-				// Current frame overlaps end of buffer
-				s.framebuffer = varBuffer[i:]
-				s.framebuffer = append(s.framebuffer, varBuffer[0:560+i-len(varBuffer)]...)
-			} else {
-				s.framebuffer = varBuffer[i : i+560]
-			}
-
-			// Animate at 30 fps
-			s.render()
+	outer:
+		for {
+			// Display the first 35 characters for 3 seconds
 			select {
-			case <-time.After(time.Millisecond * 33):
+			case out <- varBuffer[:560]:
+			case <-stationary.C:
+				break outer
 			case <-ctx.Done():
 				// Exit if we have been cancelled (by twitter)
 				return
 			}
 		}
+
+		// Scroll text across until we reach the start
+		for i := 0; i < len(varBuffer); i += 6 {
+			var frame []byte
+			if i > len(varBuffer)-560 {
+				// Current frame overlaps end of buffer
+				frame = append(varBuffer[i:], varBuffer[0:560+i-len(varBuffer)]...)
+			} else {
+				frame = varBuffer[i : i+560]
+			}
+
+			select {
+			case out <- frame:
+			case <-ctx.Done():
+				return
+			}
+		}
+
+		// Continue doing this until we are cancelled
 	}
 }
 

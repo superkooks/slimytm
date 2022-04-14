@@ -3,6 +3,7 @@
     <head>
         <title>SlimYTM</title>
         <link rel="stylesheet" href="/assets/index.css">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
 
         <script src="https://unpkg.com/vue@next"></script>
         <script src="https://unpkg.com/vue-router@4"></script>
@@ -10,10 +11,15 @@
     </head>
     <body>
         <div id="app">
+            <div v-if="$store.state.wsFailed" id="wsFailed">
+                Websocket connection has failed. Refresh the page to try again.
+            </div>
+
             <router-view></router-view>
             <player-controls></player-controls>
         </div>
 
+        <script src="/assets/store.js"></script>
         <script src="/assets/index.js"></script>
     </body>
 </html>

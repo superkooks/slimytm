@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/rand"
 	"net"
 	"time"
 
@@ -12,14 +13,18 @@ import (
 
 // player represents a squeezebox device
 type player interface {
-	GetModel() int
+	GetID() int
+	GetModel() string
 	Listener()
 	Heartbeat()
 
-	DisplayClock()
-	DisplayText(text string, ctx context.Context)
+	// Display the clock. Outputs framebuffers to the channel
+	DisplayClock() chan []byte
+	// Display the text, scrolling if needed. Outputs framebuffers to the channel
+	DisplayText(text string, ctx context.Context) chan []byte
+	Render(buf []byte)
 
-	Play(videoID string)
+	Play(videoID string) (cancel func())
 	Stop()
 
 	SetVolume(level int)
@@ -29,22 +34,14 @@ type player interface {
 	Unpause()
 }
 
-type text struct {
-	text   string
-	note   string
-	expiry time.Time
-}
-
 const (
 	AUDIO_PRELOAD      = 10 // Seconds of audio to load before playing
 	VOLUME_INCREMENT   = 5
-	IR_INTERVAL        = 300 * time.Millisecond // Prevents duplicate IR commands from ruining our day
+	IR_INTERVAL        = 200 * time.Millisecond // Prevents duplicate IR commands from ruining our day
 	HEARTBEAT_INTERVAL = time.Second * 20       // Interval to request heartbeats at
 )
 
-var players []player
-var textStack []text
-var checkStack bool
+// lastIR is global to prevent multiple players picking up the same signal
 var lastIR time.Time
 
 func tcpListener() {
@@ -79,23 +76,32 @@ func tcpListener() {
 		fmt.Println("Squeezebox says HELO!")
 
 		var c player
+		queue := &Queue{
+			Buffer: new(audioBufferWrapper),
+		}
+
 		if b[8] == 2 {
 			fmt.Println("Connected to a Squeezebox v1")
-			c = &squeezebox1{conn: conn, framebuffer: make([]byte, 560)}
+			c = &squeezebox1{id: rand.Intn(100000), conn: conn, Queue: queue}
 		} else if b[8] == 4 {
 			fmt.Println("Connected to a Squeezebox v2")
-			c = &squeezebox2{conn: conn, framebuffer: make([]byte, 1280)}
+			c = &squeezebox2{id: rand.Intn(100000), conn: conn, Queue: queue}
 		} else {
 			log.Println("non-squeezebox device tried to connect")
-			continue
+			log.Println("(choosing to continue, acting like it's a sbox2)")
+			c = &squeezebox2{id: rand.Intn(100000), conn: conn, Queue: queue}
+			// continue
 		}
 
 		fmt.Println("Firmware:", b[9])
 		fmt.Println("MAC:", net.HardwareAddr(b[10:16]).String())
 
-		players = append(players, c)
+		queue.Player = c
+		queues = append(queues, queue)
+
 		go c.Listener()
 		go c.Heartbeat()
+		go queue.Watch()
 	}
 }
 
@@ -132,65 +138,4 @@ func udpListener() {
 		listener.WriteTo(append([]byte(resp), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), remote)
 	}
 
-}
-
-func startSqueezebox() {
-	go udpListener()
-	go tcpListener()
-
-	var currentText text
-	var cancel context.CancelFunc
-	for {
-		if len(textStack) == 0 {
-			// Just in case
-			if cancel != nil {
-				cancel()
-			}
-
-			// Display the clock
-			for _, p := range players {
-				p.DisplayClock()
-			}
-		} else {
-			if time.Until(currentText.expiry) > 0 && !checkStack {
-				// Watch the stack for new text
-				if textStack[len(textStack)-1].text != currentText.text {
-					// If we find new text, then cancel the current text and display the new text
-					if cancel != nil {
-						cancel()
-					}
-
-					checkStack = true
-					continue
-				}
-			} else {
-				checkStack = false
-				currentText = textStack[len(textStack)-1]
-				for time.Since(currentText.expiry) > 0 {
-					// Don't display text that has expired
-					textStack = textStack[:len(textStack)-1]
-					if len(textStack) == 0 {
-						break
-					}
-					currentText = textStack[len(textStack)-1]
-				}
-
-				if cancel != nil {
-					cancel()
-				}
-
-				if len(textStack) == 0 {
-					continue
-				}
-
-				var ctx context.Context
-				ctx, cancel = context.WithTimeout(context.Background(), time.Until(currentText.expiry))
-				for _, p := range players {
-					p.DisplayText(currentText.text, ctx)
-				}
-			}
-		}
-
-		time.Sleep(time.Millisecond * 100)
-	}
 }

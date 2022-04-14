@@ -1,43 +1,75 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/Jeffail/gabs/v2"
 	"github.com/gorilla/websocket"
 )
 
-var queue []*gabs.Container
-var queueIndex int
-var playing bool
-var paused bool
-var elapsedSeconds int
-var queueLock = new(sync.Mutex)
+type Song struct {
+	ID         string      `json:"videoId"`
+	Title      string      `json:"title"`
+	Artists    []Artist    `json:"artists"`
+	Album      Album       `json:"album"`
+	Duration   string      `json:"duration"`
+	Thumbnails []Thumbnail `json:"thumbnails"`
+}
 
-var playingClient = 0
+type Artist struct {
+	Name string `json:"name"`
+}
 
-func queueWatcher() {
+type Album struct {
+	Name string `json:"name"`
+}
+
+type Thumbnail struct {
+	URL string `json:"url"`
+}
+
+type text struct {
+	bufs     chan []byte
+	ctx      context.Context
+	disabled func() bool
+}
+
+type Queue struct {
+	Player player
+	Buffer *audioBufferWrapper
+	Texts  []text
+
+	Songs []Song
+	Index int
+
+	CancelPlaying func()
+	Playing       bool
+	Loading       bool
+	Paused        bool
+	ElapsedSecs   int
+}
+
+var queues []*Queue
+
+func (q *Queue) Watch() {
 	for {
-		if playing && len(queue) > 0 {
-			songTimes := strings.Split(queue[queueIndex].Path("duration").Data().(string), ":")
+		if q.Playing && len(q.Songs) > 0 {
+			songTimes := strings.Split(q.Songs[q.Index].Duration, ":")
 			mins, _ := strconv.Atoi(songTimes[0])
 			secs, _ := strconv.Atoi(songTimes[1])
 
-			fmt.Println("song time:", elapsedSeconds, "s")
-			fmt.Println("duration:", mins*60+secs)
-
-			if elapsedSeconds >= mins*60+secs-1 {
+			if q.ElapsedSecs >= mins*60+secs-1 {
 				fmt.Println("reached end of song")
-				if queueIndex+1 < len(queue) {
+				if q.Index+1 < len(q.Songs) {
 					fmt.Println("playing next song")
-					nextSong()
+					q.Next()
 				} else {
-					resetPlayingText(false)
-					playing = false
+					// resetPlayingText(false)
+					q.Playing = false
 				}
 			}
 		}
@@ -46,111 +78,166 @@ func queueWatcher() {
 	}
 }
 
-// Returns the JSON representation of the current song
-func getCurrentSong() []byte {
-	queueLock.Lock()
-	defer queueLock.Unlock()
+func (q *Queue) Next() {
+	q.Player.Stop()
+	if q.CancelPlaying != nil {
+		q.CancelPlaying()
+	}
 
+	q.Buffer.Reset()
+	q.Playing = false
+	q.Paused = false
+	q.Index++
+
+	// Don't run over the end of the queue
+	if q.Index < len(q.Songs) {
+		q.Loading = true
+		q.UpdateClients()
+		q.CancelPlaying = q.Player.Play(q.Songs[q.Index].ID)
+	}
+}
+
+func (q *Queue) Previous() {
+	q.Player.Stop()
+	if q.CancelPlaying != nil {
+		q.CancelPlaying()
+	}
+
+	q.Buffer.Reset()
+	q.Playing = false
+	q.Paused = false
+
+	// Don't run off the end of the queue
+	if q.ElapsedSecs < 5 && q.Index > 0 {
+		q.Index--
+	}
+
+	q.Loading = true
+	q.UpdateClients()
+	q.CancelPlaying = q.Player.Play(q.Songs[q.Index].ID)
+}
+
+func (q *Queue) Pause() {
+	if q.Paused {
+		q.Player.Unpause()
+	} else {
+		q.Player.Pause()
+	}
+
+	q.Paused = !q.Paused
+	q.Playing = !q.Playing
+	q.UpdateClients()
+}
+
+func (q *Queue) Reset() {
+	q.Player.Stop()
+	if q.CancelPlaying != nil {
+		q.CancelPlaying()
+	}
+	q.Buffer.Reset()
+
+	q.Songs = []Song{}
+	q.Index = 0
+	q.Paused = false
+	q.Playing = false
+	q.Loading = false
+	q.ElapsedSecs = 0
+	q.UpdateClients()
+}
+
+// Returns the JSON representation of the current song
+func (q *Queue) CurrentSongJSON() []byte {
 	var song string
-	if queueIndex < len(queue) && len(queue) > 0 && playing {
-		song = queue[queueIndex].String()
+	if q.Index < len(q.Songs) && len(q.Songs) > 0 && (q.Playing || q.Paused) {
+		b, _ := json.Marshal(q.Songs[q.Index])
+		song = string(b)
 	} else {
 		song = "{}"
 	}
 
-	return []byte(fmt.Sprintf(`{"song": %v, "paused": %v, "volume": %v}`,
-		song, paused, players[playingClient].GetVolume(),
+	return []byte(fmt.Sprintf(`{"id": %v, "type": "%v", "song": %v, "paused": %v, "loading": %v, "volume": %v}`,
+		q.Player.GetID(), q.Player.GetModel(), song, q.Paused, q.Loading, q.Player.GetVolume(),
 	))
 }
 
-func nextSong() {
-	defer updateWebClients()
-	players[playingClient].Stop()
-	if queueIndex >= len(queue)-1 {
-		// Don't run off the end of the queue
-		resetPlayingText(false)
-		playing = false
-		return
-	}
+// Returns buffers with the current song name
+func (q *Queue) CurrentSongBuf() chan []byte {
+	var curText string
+	var curBuf chan []byte
+	out := make(chan []byte)
 
-	queueLock.Lock()
-	queueIndex++
-	playing = false
-	queueLock.Unlock()
+	go func() {
+		for {
+			if len(q.Songs) == 0 {
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
 
-	players[playingClient].Play(queue[queueIndex].Path("videoId").Data().(string))
-	resetPlayingText(true)
-}
+			songsStr := fmt.Sprintf("%v from %v by %v",
+				q.Songs[q.Index].Title,
+				q.Songs[q.Index].Album.Name,
+				q.Songs[q.Index].Artists[0].Name,
+			)
 
-func previousSong() {
-	defer updateWebClients()
-	if queueIndex == 0 {
-		// Don't run off the end of the queue
-		return
-	}
+			if curText != songsStr {
+				curBuf = q.Player.DisplayText(songsStr, context.Background())
+				curText = songsStr
+			}
 
-	players[playingClient].Stop()
-
-	queueLock.Lock()
-	if elapsedSeconds < 5 && queueIndex != 0 {
-		queueIndex--
-	}
-	queueLock.Unlock()
-
-	players[playingClient].Play(queue[queueIndex].Path("videoId").Data().(string))
-	resetPlayingText(true)
-}
-
-func togglePause() {
-	defer updateWebClients()
-	if paused {
-		players[playingClient].Unpause()
-	} else {
-		players[playingClient].Pause()
-	}
-	paused = !paused
-	playing = !playing
-}
-
-func resetQueue() {
-	defer updateWebClients()
-	players[playingClient].Stop()
-	queueLock.Lock()
-	queue = []*gabs.Container{}
-	queueIndex = 0
-	playing = false
-	paused = false
-	elapsedSeconds = 0
-	queueLock.Unlock()
-	resetPlayingText(false)
-}
-
-func resetPlayingText(set bool) {
-	// Clear text stack of currently playing text
-	for k, v := range textStack {
-		if v.note == "playing" {
-			textStack = append(textStack[:k], textStack[k+1:]...)
-			break
+			out <- <-curBuf
 		}
-	}
-	checkStack = true
+	}()
 
-	if set {
-		// Set currently playing text
-		song := queue[queueIndex].Path("title").String()
-		artist := queue[queueIndex].Path("artists.0.name").String()
-		album := queue[queueIndex].Path("album.name").String()
-		textStack = append(textStack, text{
-			text:   fmt.Sprintf("%v from %v by %v", song, album, artist),
-			note:   "playing",
-			expiry: time.Now().Add(time.Hour), // Effectively never expire, we will clear ourselves
-		})
+	return out
+}
+
+// Update all clients
+func (q *Queue) UpdateClients() {
+	s := q.CurrentSongJSON()
+	for _, v := range clients {
+		v.Conn.WriteMessage(websocket.TextMessage, s)
 	}
 }
 
-func updateWebClients() {
-	s := getCurrentSong()
-	for _, v := range webClients {
-		v.WriteMessage(websocket.TextMessage, s)
+func (q *Queue) Composite() {
+	// Clock will always be displayed with the lowest priority, queue starts disabled
+	q.Texts = []text{
+		{
+			bufs: q.Player.DisplayClock(),
+			ctx:  context.Background(),
+		},
+		{
+			bufs:     q.Player.DisplayText("Loading...", context.Background()),
+			ctx:      context.Background(),
+			disabled: func() bool { return !q.Loading },
+		},
+		{
+			bufs:     q.CurrentSongBuf(),
+			ctx:      context.Background(),
+			disabled: func() bool { return !q.Playing },
+		},
+	}
+
+	for {
+		top := q.Texts[len(q.Texts)-1]
+
+		// Find the top enabled element
+		i := 1
+		for top.disabled != nil && top.disabled() {
+			i++
+			top = q.Texts[len(q.Texts)-i]
+		}
+
+		if top.ctx.Err() != nil {
+			// The context has been cancelled/timed out, remove it and try again
+			q.Texts = append(q.Texts[:len(q.Texts)-i], q.Texts[len(q.Texts)-i+1:]...)
+			continue
+		}
+
+		// Render the top buffer
+		q.Player.Render(<-top.bufs)
+
+		// Animate the screen at 30 fps
+		time.Sleep(time.Millisecond * 33)
 	}
 }

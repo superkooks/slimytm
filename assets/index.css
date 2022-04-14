@@ -16,13 +16,21 @@ body {
     flex-direction: column;
     height: 100%;
     overflow-x: hidden;
+    overflow-y: hidden;
+}
+
+#wsFailed {
+    background-color: #ed4245;
+    padding: 40px;
+    color: white;
+    font-size: 20px;
+    font-weight: 400;
 }
 
 .routerView {
     padding: 30px;
     flex-grow: 1;
     overflow-x: hidden;
-    overflow-y: scroll;
 }
 
 hr {
@@ -43,12 +51,21 @@ hr {
     background-color: #f2f2f2;
 }
 
-.playButton {
-    width: 48px;
-    height: 48px;
+#playerControlButtons {
+    margin-left: 60px;
+    cursor: pointer;
+}
+
+.material-icons.md-48 {
+    font-size: 48px;
 }
 
 #currentSong {
+    /* Position in the centre of the screen */
+    position: fixed;
+    left: 50%;
+    transform: translate(-50%, 0%);
+
     display: flex;
     flex-direction: row;
     align-items: center;
@@ -82,9 +99,15 @@ hr {
     border-radius: 4px;
 }
 
+#playerVolume {
+    margin-right: 60px;
+}
+
 #playlists {
     display: flex;
     flex-direction: row;
+    flex-wrap: wrap;
+    align-content: flex-start;
 }
 
 .playlistCover {
