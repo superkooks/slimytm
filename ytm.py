@@ -14,7 +14,13 @@ def libraryPlaylists():
     for p in playlists:
         p["id"] = p["playlistId"]
         del p["playlistId"]
-        p["thumbnail"] = p["thumbnails"][1]["url"]
+
+        try:
+            p["thumbnail"] = p["thumbnails"][1]["url"]
+        except IndexError:
+            # Handle empty thumbnails
+            p["thumbnail"] = "https://lh3.googleusercontent.com/wr28amLh-pMk4vmrYv_Orhly8DTtdvZJFuLwmXG5RNvZJjGlFe_WMnKp4pWlZI1gL7ihQn-xZuzZ0A6VZZbv2Z-iTEH3dpjn=s576"
+
         del p["thumbnails"]
 
     return json.dumps(playlists, indent=2)
