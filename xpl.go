@@ -22,24 +22,17 @@ const xplSource = "superkooks-slimytm.mandoon"
 var xplPort *net.UDPConn
 
 func xplInit() {
-	b, err := net.ResolveUDPAddr("udp4", "0.0.0.0:3865")
+	var err error
+	xplPort, err = net.ListenUDP("udp4", &net.UDPAddr{})
 	if err != nil {
 		panic(err)
 	}
 
-	xplPort, err = net.ListenUDP("udp", b)
-	if err != nil {
-		panic(err)
-	}
+	go xplHeartbeat()
 }
 
 func sendXPL(m xplMessage) {
-	bAddr, err := net.ResolveUDPAddr("udp4", "192.168.73.255:3865")
-	if err != nil {
-		panic(err)
-	}
-
-	xplPort.WriteTo([]byte(compileXPL(m)), bAddr)
+	xplPort.Write([]byte(compileXPL(m)))
 }
 
 func compileXPL(x xplMessage) string {
@@ -111,5 +104,23 @@ func xplListener() {
 				})
 			}
 		}
+	}
+}
+
+func xplHeartbeat() {
+	addr := strings.Split(xplPort.LocalAddr().String(), ":")
+
+	for {
+		sendXPL(xplMessage{
+			messageType: "xpl-cmnd",
+			target:      "*",
+			schema:      "hbeat.app",
+			body: map[string]string{
+				"interval":  "1",
+				"port":      addr[len(addr)-1],
+				"remote-ip": strings.Join(addr[:len(addr)-1], ""),
+			},
+		})
+		time.Sleep(time.Minute)
 	}
 }
