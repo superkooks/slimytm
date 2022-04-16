@@ -166,7 +166,7 @@ func (s *squeezebox1) DisplayClock() chan []byte {
 
 	go func() {
 		for {
-			buf := make([]byte, 1280)
+			buf := make([]byte, 560)
 			h, m, sec := time.Now().Local().Clock()
 			for k, v := range fmt.Sprintf("                %02d:%02d:%02d", h, m, sec) {
 				// Set each character individually with an offset
@@ -345,8 +345,8 @@ func (s *squeezebox1) Render(buf []byte) {
 func (s *squeezebox1) scrollBuffer(varBuffer []byte, ctx context.Context, out chan []byte) {
 	for {
 		// Wait until we are being composited before starting the timer
-		out <- make([]byte, 1280)
-		out <- make([]byte, 1280)
+		out <- make([]byte, 560)
+		out <- make([]byte, 560)
 		stationary := time.NewTimer(time.Second * 3)
 
 	outer:
