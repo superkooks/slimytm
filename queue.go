@@ -168,7 +168,7 @@ func (q *Queue) CurrentSongBuf() chan []byte {
 
 	go func() {
 		for {
-			if len(q.Songs) == 0 {
+			if len(q.Songs) == 0 || q.Index < 0 || q.Index >= len(q.Songs) {
 				time.Sleep(100 * time.Millisecond)
 				continue
 			}
