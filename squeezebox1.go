@@ -260,6 +260,13 @@ func (s *squeezebox1) Play(videoID string) (cancel func()) {
 }
 
 func (s *squeezebox1) Stop() {
+	// Attempts to fix issue where squeezebox won't start next song
+	s.stop()
+	time.Sleep(100 * time.Millisecond)
+	s.stop()
+}
+
+func (s *squeezebox1) stop() {
 	// Send the strm command to the Squeezebox
 	msg := make([]byte, 2)
 	binary.BigEndian.PutUint16(msg, uint16(28))
