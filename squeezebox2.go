@@ -37,7 +37,7 @@ func (s *squeezebox2) GetName() string {
 
 func (s *squeezebox2) Listener() {
 	// Load the font for this player
-	f, err := os.Open("ter-128b.psf")
+	f, err := os.Open("ter-132n.psf")
 	if err != nil {
 		panic(err)
 	}
@@ -173,7 +173,7 @@ func (s *squeezebox2) DisplayClock() chan []byte {
 		for {
 			buf := make([]byte, 1280)
 			h, m, sec := time.Now().Local().Clock()
-			for k, v := range fmt.Sprintf("       %02d:%02d:%02d", h, m, sec) {
+			for k, v := range fmt.Sprintf("      %02d:%02d:%02d", h, m, sec) {
 				// Set each character individually with an offset
 				s.setChar(s.font.getChar(int(v)), k*8, buf)
 			}
@@ -188,7 +188,7 @@ func (s *squeezebox2) DisplayClock() chan []byte {
 func (s *squeezebox2) DisplayText(text string, ctx context.Context) chan []byte {
 	out := make(chan []byte)
 
-	if len(text) > 22 {
+	if len(text) > 20 {
 		// Scroll text across screen
 		text += "    "
 		variableFrame := make([]byte, 4*16*len(text))
@@ -412,17 +412,17 @@ func (s *squeezebox2) scrollBuffer(varBuffer []byte, ctx context.Context, out ch
 }
 
 func (s *squeezebox2) setChar(chr []byte, offset int, buffer []byte) {
-	// Form chars into int16 (font is 14 pix wide)
-	var wideChr []int16
+	// Form chars into uint16 (font is 16 pix wide)
+	var wideChr []uint16
 	for i := 0; i < len(chr); i += 2 {
-		wideChr = append(wideChr, int16(chr[i])<<8|int16(chr[i+1]))
+		wideChr = append(wideChr, uint16(chr[i])<<8|uint16(chr[i+1]))
 	}
 
 	// Set the chr in the framebuffer
-	i := 4 * offset * 14
-	for col := 0; col < 14; col++ {
+	i := 4 * offset * 16
+	for col := 0; col < 16; col++ {
 		for _, v := range wideChr {
-			mask := int16(0b100000000000000 >> col)
+			mask := uint16(0b1000000000000000 >> col)
 			if v&mask > 0 {
 				squeezeMask := byte(1 << (7 - i%8))
 				buffer[i/8] |= squeezeMask
@@ -430,6 +430,5 @@ func (s *squeezebox2) setChar(chr []byte, offset int, buffer []byte) {
 
 			i++
 		}
-		i += 4
 	}
 }
