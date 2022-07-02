@@ -373,8 +373,8 @@ func (s *squeezebox2) Render(buf []byte) {
 func (s *squeezebox2) scrollBuffer(varBuffer []byte, ctx context.Context, out chan []byte) {
 	for {
 		// Wait until we are being composited before starting the timer
-		out <- make([]byte, 1280)
-		out <- make([]byte, 1280)
+		out <- varBuffer[:1280]
+		out <- varBuffer[:1280]
 		stationary := time.NewTimer(time.Second * 3)
 
 	outer:
