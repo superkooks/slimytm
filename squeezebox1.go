@@ -20,6 +20,7 @@ type squeezebox1 struct {
 	conn   *net.TCPConn
 	font   psfFont
 	volume int
+	mac    net.HardwareAddr
 }
 
 func (s *squeezebox1) GetID() int {
@@ -28,6 +29,10 @@ func (s *squeezebox1) GetID() int {
 
 func (s *squeezebox1) GetModel() string {
 	return "Squeezebox 1"
+}
+
+func (s *squeezebox1) GetName() string {
+	return persistent.Clients[s.mac.String()].Name
 }
 
 func (s *squeezebox1) Listener() {
@@ -101,10 +106,11 @@ func (s *squeezebox1) Listener() {
 				schema:      "remote.basic",
 				body: map[string]string{
 					"keys":   irCode,
-					"device": "squeezebox",
+					"device": s.GetName(),
 					"zone":   "slimserver",
+					"power":  "on",
 				},
-			})
+			}, "slimdev-slimserv."+s.GetName())
 
 			if irCode == "7689807f" {
 				// Volume UP

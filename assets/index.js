@@ -71,6 +71,7 @@ app.use(store)
 app.component("player", {
     props: ["player"],
     template: `<div class="player" @click="this.$router.push('/player/'+player.id)">
+    <p style="font-weight: bold;">{{ player.name }}</p>
     <p>{{ player.type }}</p>
 </div>`
 })

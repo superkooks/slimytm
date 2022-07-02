@@ -15,6 +15,7 @@ import (
 type player interface {
 	GetID() int
 	GetModel() string
+	GetName() string
 	Listener()
 	Heartbeat()
 
@@ -82,14 +83,14 @@ func tcpListener() {
 
 		if b[8] == 2 {
 			fmt.Println("Connected to a Squeezebox v1")
-			c = &squeezebox1{id: rand.Intn(100000), conn: conn, Queue: queue}
+			c = &squeezebox1{id: rand.Intn(100000), conn: conn, Queue: queue, mac: net.HardwareAddr(b[10:16])}
 		} else if b[8] == 4 {
 			fmt.Println("Connected to a Squeezebox v2")
-			c = &squeezebox2{id: rand.Intn(100000), conn: conn, Queue: queue}
+			c = &squeezebox2{id: rand.Intn(100000), conn: conn, Queue: queue, mac: net.HardwareAddr(b[10:16])}
 		} else {
 			log.Println("non-squeezebox device tried to connect")
 			log.Println("(choosing to continue, acting like it's a sbox2)")
-			c = &squeezebox2{id: rand.Intn(100000), conn: conn, Queue: queue}
+			c = &squeezebox2{id: rand.Intn(100000), conn: conn, Queue: queue, mac: net.HardwareAddr(b[10:16])}
 			// continue
 		}
 
@@ -124,7 +125,8 @@ func udpListener() {
 		}
 
 		if b[0] != 'd' {
-			panic("received non-discovery request")
+			fmt.Println("received non-discovery request")
+			continue
 		}
 
 		fmt.Println("Responding to discovery request from", remote.String())

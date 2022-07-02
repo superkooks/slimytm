@@ -17,13 +17,17 @@ type xplMessage struct {
 	body        map[string]string
 }
 
-const xplSource = "superkooks-slimytm.mandoon"
-
 var xplPort *net.UDPConn
+var sendAddr *net.UDPAddr
 
 func xplInit() {
 	var err error
-	xplPort, err = net.ListenUDP("udp4", &net.UDPAddr{})
+	sendAddr, err = net.ResolveUDPAddr("udp4", "255.255.255.255:3865")
+	if err != nil {
+		panic(err)
+	}
+
+	xplPort, err = net.ListenUDP("udp4", nil)
 	if err != nil {
 		panic(err)
 	}
@@ -31,11 +35,12 @@ func xplInit() {
 	go xplHeartbeat()
 }
 
-func sendXPL(m xplMessage) {
-	xplPort.Write([]byte(compileXPL(m)))
+func sendXPL(m xplMessage, source string) {
+	out := compileXPL(m, source)
+	xplPort.WriteToUDP([]byte(out), sendAddr)
 }
 
-func compileXPL(x xplMessage) string {
+func compileXPL(x xplMessage, source string) string {
 	m := fmt.Sprintf(`%v
 {
 hop=1
@@ -44,7 +49,7 @@ target=%v
 }
 %v
 {
-`, x.messageType, xplSource, x.target, x.schema)
+`, x.messageType, source, x.target, x.schema)
 
 	for k, v := range x.body {
 		m += k + "=" + v + "\n"
@@ -85,42 +90,72 @@ func xplListener() {
 		}
 
 		x := parseXPL(string(b[:n]))
-		if x.schema == "osd.basic" {
-			delay, ok := x.body["delay"]
-			if !ok {
-				delay = "5"
-			}
+		target := strings.Split(x.target, ".")
+		if target[0] == "slimdev-slimserv" {
+			if x.schema == "osd.basic" {
+				delay, ok := x.body["delay"]
+				if !ok {
+					delay = "5"
+				}
 
-			d, err := strconv.Atoi(delay)
-			if err != nil {
-				panic("can't convert delay to integer")
-			}
+				d, err := strconv.Atoi(delay)
+				if err != nil {
+					panic("can't convert delay to integer")
+				}
 
-			for _, v := range queues {
-				ctx, _ := context.WithTimeout(context.Background(), time.Second*time.Duration(d))
-				v.Texts = append(v.Texts, text{
-					bufs: v.Player.DisplayText(x.body["text"], ctx),
-					ctx:  ctx,
-				})
+				for _, v := range queues {
+					if v.Player.GetName() == target[1] {
+						cleaned := strings.TrimLeft(x.body["text"], "\\n")
+						cleaned = strings.TrimLeft(cleaned, "\n")
+
+						fmt.Println("************ GOT xPL for", v.Player.GetName())
+						ctx, _ := context.WithTimeout(context.Background(), time.Second*time.Duration(d))
+						v.Texts = append(v.Texts, text{
+							bufs: v.Player.DisplayText(cleaned, ctx),
+							ctx:  ctx,
+						})
+
+						break
+					}
+				}
 			}
 		}
 	}
 }
 
 func xplHeartbeat() {
-	addr := strings.Split(xplPort.LocalAddr().String(), ":")
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		panic(err)
+	}
+
+	var addr string
+	for _, v := range addrs {
+		a := v.(*net.IPNet).IP.To4()
+
+		if a.IsGlobalUnicast() {
+			addr = a.String()
+			fmt.Println("using", addr, "as remote-ip")
+			break
+		}
+	}
+
+	port := strings.Split(xplPort.LocalAddr().String(), ":")[1]
 
 	for {
-		sendXPL(xplMessage{
-			messageType: "xpl-cmnd",
-			target:      "*",
-			schema:      "hbeat.app",
-			body: map[string]string{
-				"interval":  "1",
-				"port":      addr[len(addr)-1],
-				"remote-ip": strings.Join(addr[:len(addr)-1], ""),
-			},
-		})
+		for _, v := range persistent.Clients {
+			sendXPL(xplMessage{
+				messageType: "xpl-stat",
+				target:      "*",
+				schema:      "hbeat.app",
+				body: map[string]string{
+					"interval":  "1",
+					"port":      port,
+					"remote-ip": addr,
+				},
+			}, "slimdev-slimserv."+v.Name)
+		}
+
 		time.Sleep(time.Minute)
 	}
 }

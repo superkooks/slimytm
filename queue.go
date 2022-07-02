@@ -155,8 +155,8 @@ func (q *Queue) CurrentSongJSON() []byte {
 		song = "{}"
 	}
 
-	return []byte(fmt.Sprintf(`{"id": %v, "type": "%v", "song": %v, "paused": %v, "loading": %v, "volume": %v}`,
-		q.Player.GetID(), q.Player.GetModel(), song, q.Paused, q.Loading, q.Player.GetVolume(),
+	return []byte(fmt.Sprintf(`{"id": %v, "name": "%v", "type": "%v", "song": %v, "paused": %v, "loading": %v, "volume": %v}`,
+		q.Player.GetID(), q.Player.GetName(), q.Player.GetModel(), song, q.Paused, q.Loading, q.Player.GetVolume(),
 	))
 }
 

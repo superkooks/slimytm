@@ -36,8 +36,8 @@ func audio(w http.ResponseWriter, r *http.Request) {
 func getPlayers(w http.ResponseWriter, r *http.Request) {
 	// Inlining a struct seems like the simplest solution
 	type resp struct {
-		ID int `json:"id"`
-		// Name string `json:"name"`
+		ID   int    `json:"id"`
+		Name string `json:"name"`
 		Type string `json:"type"`
 		// Thumbnail string `json:"thumbnail"`
 	}
@@ -47,6 +47,7 @@ func getPlayers(w http.ResponseWriter, r *http.Request) {
 		out = append(out, resp{
 			ID:   v.Player.GetID(),
 			Type: v.Player.GetModel(),
+			Name: v.Player.GetName(),
 		})
 	}
 
@@ -109,6 +110,8 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 // Entrypoint
 func main() {
+	LoadPersistent()
+
 	go udpListener()
 	go tcpListener()
 

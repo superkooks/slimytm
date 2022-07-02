@@ -60,6 +60,15 @@ hr {
     font-size: 48px;
 }
 
+.player {
+    margin: 20px;
+    cursor: pointer;
+}
+
+.player > p {
+    margin: 0;
+}
+
 #currentSong {
     /* Position in the centre of the screen */
     position: fixed;
