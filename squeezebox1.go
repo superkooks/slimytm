@@ -211,6 +211,7 @@ func (s *squeezebox1) DisplayText(text string, ctx context.Context) chan []byte 
 			for {
 				select {
 				case <-ctx.Done():
+					return
 				case out <- buf:
 				}
 			}
