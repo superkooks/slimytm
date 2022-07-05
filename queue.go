@@ -57,7 +57,7 @@ var queues []*Queue
 
 func (q *Queue) Watch() {
 	for {
-		if q.Playing && len(q.Songs) > 0 {
+		if q.Playing && len(q.Songs) > 0 && q.Index >= 0 {
 			songTimes := strings.Split(q.Songs[q.Index].Duration, ":")
 			mins, _ := strconv.Atoi(songTimes[0])
 			secs, _ := strconv.Atoi(songTimes[1])
