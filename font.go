@@ -21,11 +21,12 @@ func readPSF(f *os.File) psfFont {
 	header := make([]byte, 32)
 	_, err := f.Read(header)
 	if err != nil {
-		panic(err)
+		logger.Panicw("unable to read font header",
+			"err", err)
 	}
 
 	if header[0] != 0x72 || header[1] != 0xb5 || header[2] != 0x4a || header[3] != 0x86 {
-		panic("file is not a psf font")
+		logger.Panic("file is not a psf font")
 	}
 
 	p := psfFont{

@@ -9,6 +9,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	"go.uber.org/zap"
 )
 
 var upgrader = websocket.Upgrader{
@@ -17,15 +18,17 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 }
 
+var logger *zap.SugaredLogger
+
 // Handle players downloading audio
 func audio(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
 	for _, v := range queues {
 		if fmt.Sprint(v.Player.GetID()) == vars["id"] {
-			fmt.Println("****** New audio request")
-			fmt.Println("Buffer is currently", v.Buffer.Len(), "bytes long")
-			fmt.Println("     =", v.Buffer.Len()/48000/2/2, "s")
+			logger.Debugw("new audio request",
+				"bufLen", v.Buffer.Len(),
+				"bufSecs", v.Buffer.Len()/48000/2/2)
 			io.Copy(w, v.Buffer)
 			return
 		}
@@ -53,7 +56,9 @@ func getPlayers(w http.ResponseWriter, r *http.Request) {
 
 	b, err := json.Marshal(out)
 	if err != nil {
-		panic(err)
+		logger.Errorw("unable to encode player information",
+			"err", err)
+		return
 	}
 
 	w.Write(b)
@@ -64,7 +69,9 @@ func ws(w http.ResponseWriter, r *http.Request) {
 	// Upgrade the connection to ws
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		panic(err)
+		logger.Errorw("unable to upgrade connection to websocket",
+			"err", err)
+		return
 	}
 
 	// Add the client to our list
@@ -110,28 +117,41 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 // Entrypoint
 func main() {
+	// Load persistent data
 	LoadPersistent()
 
+	// Start the logger
+	var conf zap.Config
+	conf = zap.NewProductionConfig()
+	conf.OutputPaths = append(conf.OutputPaths, persistent.LogLocations...)
+	conf.Development = true
+	conf.Level.SetLevel(zap.DebugLevel)
+
+	l, err := conf.Build()
+	if err != nil {
+		panic(err)
+	}
+
+	defer l.Sync()
+	logger = l.Sugar()
+	logger.Info("slimytm is starting")
+
+	// Start slimproto listeners
 	go udpListener()
 	go tcpListener()
 
+	// Start xpl
 	xplInit()
 	go xplListener()
 
-	fmt.Println("Serving api on :9001")
+	// Start webserver
 	r := mux.NewRouter()
 	r.Use(corsMiddleware)
 	r.Path("/players").HandlerFunc(getPlayers)
 	r.Path("/player/{id}/audio.wav").HandlerFunc(audio)
 	r.Path("/ws").HandlerFunc(ws)
 
-	// f, _ := os.Open("wa.wav")
-	// n, err := io.Copy(audioAssetsBytes, f)
-	// fmt.Println("copied", n, "bytes")
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// f.Close()
-
-	panic(http.ListenAndServe(":9001", r))
+	logger.Panicw("unable to start http server",
+		"port", 9001,
+		"err", http.ListenAndServe(":9001", r))
 }

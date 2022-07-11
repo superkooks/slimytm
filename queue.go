@@ -63,12 +63,12 @@ func (q *Queue) Watch() {
 			secs, _ := strconv.Atoi(songTimes[1])
 
 			if q.ElapsedSecs >= mins*60+secs-1 {
-				fmt.Println("reached end of song")
+				logger.Debug("reached end of song")
 				if q.Index+1 < len(q.Songs) {
-					fmt.Println("playing next song")
+					logger.Debug("playing next song")
 					q.Next()
 				} else {
-					// resetPlayingText(false)
+					logger.Debug("reached end of queue")
 					q.Playing = false
 				}
 			}

@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/Jeffail/gabs/v2"
@@ -32,7 +31,8 @@ func (c *Client) Listener() {
 		var e Event
 		err := c.Conn.ReadJSON(&e)
 		if err != nil {
-			fmt.Println("client disconnected:", err)
+			logger.Debugw("client disconnected",
+				"err", err)
 			return
 		}
 
@@ -48,7 +48,9 @@ func (c *Client) Listener() {
 			var p PlayEvent
 			err := json.Unmarshal(e.Data, &p)
 			if err != nil {
-				panic(err)
+				logger.Warnw("unable to unmarshal event",
+					"err", err)
+				continue
 			}
 
 			c.PlaySongs(queue, p)
@@ -62,19 +64,22 @@ func (c *Client) Listener() {
 			var v int
 			err := json.Unmarshal(e.Data, &v)
 			if err != nil {
-				panic(err)
+				logger.Warnw("unable to unmarshal event",
+					"err", err)
+				continue
 			}
 
 			queue.Player.SetVolume(v)
 		} else {
-			fmt.Println("Received unknown event from web client")
+			logger.Warnw("received unknown event from web client",
+				"event", e.Type)
 		}
 	}
 }
 
 func (c *Client) PlaySongs(q *Queue, p PlayEvent) {
 	if q == nil {
-		fmt.Println("unknwon player for event, dropping")
+		logger.Warnw("unknown player for event, dropping")
 		return
 	}
 
@@ -82,7 +87,9 @@ func (c *Client) PlaySongs(q *Queue, p PlayEvent) {
 	var startSong Song
 	err := json.Unmarshal(p.StartSong, &startSong)
 	if err != nil {
-		panic(err)
+		logger.Warnw("unable to unmarshal event",
+			"err", err)
+		return
 	}
 
 	q.Songs = []Song{startSong}
@@ -94,17 +101,23 @@ func (c *Client) PlaySongs(q *Queue, p PlayEvent) {
 	case "playlist":
 		resp, err := http.Get("http://localhost:9000/api/playlist/" + p.QueueID)
 		if err != nil {
-			panic(err)
+			logger.Errorw("unable to retrieve playlist",
+				"err", err)
+			return
 		}
 
 		playlist, err := gabs.ParseJSONBuffer(resp.Body)
 		if err != nil {
-			panic(err)
+			logger.Errorw("unable to parse json playlist info",
+				"err", err)
+			return
 		}
 
 		err = json.Unmarshal(playlist.Path("tracks").Bytes(), &q.Songs)
 		if err != nil {
-			panic(err)
+			logger.Errorw("unable to get tracks from playlist info",
+				"err", err)
+			return
 		}
 
 		for k, v := range q.Songs {
@@ -114,10 +127,7 @@ func (c *Client) PlaySongs(q *Queue, p PlayEvent) {
 			}
 		}
 
-		fmt.Println("index @", q.Index)
-		fmt.Println("length:", len(q.Songs))
-		// fmt.Println("next song:", queue[queueIndex+1].Path("title").String())
 	default:
-		panic("unknown queue type")
+		logger.Warn("unknown queue type")
 	}
 }

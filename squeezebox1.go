@@ -39,7 +39,8 @@ func (s *squeezebox1) Listener() {
 	// Load the font for this player
 	f, err := os.Open("GohaClassic-16.psfu")
 	if err != nil {
-		panic(err)
+		logger.Panicw("unable read font",
+			"err", err)
 	}
 
 	font := readPSF(f)
@@ -69,15 +70,18 @@ func (s *squeezebox1) Listener() {
 				}
 			}
 
-			fmt.Println("**** Player has timed out")
+			logger.DPanic("player has timed out")
 			s.conn.Close()
 			return
 		} else if err != nil {
-			panic(err)
+			logger.Errorw("unable to read from connection",
+				"err", err)
+			return
 		}
 
-		fmt.Println(b[:n])
-		fmt.Println("DATA LEN:", n)
+		logger.Debugw("new packet",
+			"len", n,
+			"data", b[:n])
 
 		if string(b[:4]) == "STAT" {
 			// Status message from the squeezebox
@@ -89,7 +93,8 @@ func (s *squeezebox1) Listener() {
 
 			bytesPlayed := int(binary.BigEndian.Uint64(b[23:31])) - int(binary.BigEndian.Uint32(b[19:23]))
 			s.Queue.ElapsedSecs = bytesPlayed / 48000 / 2 / 2
-			fmt.Println("********** STAT", string(b[8:12]))
+			logger.Debugw("STAT",
+				"type", string(b[8:12]))
 
 		} else if string(b[:4]) == "IR  " {
 			if time.Since(lastIR) < IR_INTERVAL {
@@ -99,7 +104,8 @@ func (s *squeezebox1) Listener() {
 
 			// IR command from the remote
 			irCode := hex.EncodeToString(b[14:18])
-			fmt.Println("IR Code", irCode)
+			logger.Debugw("ir event",
+				"code", irCode)
 			sendXPL(xplMessage{
 				messageType: "xpl-trig",
 				target:      "*",
@@ -154,12 +160,14 @@ func (s *squeezebox1) Heartbeat() {
 		binary.BigEndian.PutUint16(msg, uint16(28))
 		msg = append(msg, []byte("strm")...)
 		msg = append(msg, 't', '0', 'm', '?', '?', '?', '?', 0, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 41, 0, 0, 0, 0)
-		fmt.Println(len(msg))
-		fmt.Println(hex.Dump(msg))
+		logger.Debugw("sending heartbeat",
+			"len", len(msg),
+			"dump", hex.Dump(msg))
 		_, err := s.conn.Write(msg)
 		if err != nil {
 			// Client probably dropped conn
-			fmt.Println("**** Heartbeat err:", err)
+			logger.DPanic("could not send heartbeat",
+				"err", err)
 			return
 		}
 
@@ -224,11 +232,14 @@ func (s *squeezebox1) DisplayText(text string, ctx context.Context) chan []byte 
 func (s *squeezebox1) Play(videoID string) (cancel func()) {
 	// Get the player URL with youtube-dl
 	co := exec.Command("youtube-dl", "https://music.youtube.com/watch?v="+videoID, "-f", "bestaudio[ext=webm]", "-g")
-	fmt.Println(co.String())
+	logger.Debugw("getting audio download url",
+		"cmd", co.String())
 	b, err := co.CombinedOutput()
-	fmt.Println(string(b))
+	logger.Debugw("youtube-dl command output", "output", string(b))
 	if err != nil {
-		panic(err)
+		logger.Errorw("unable to get audio download url",
+			"err", err)
+		return
 	}
 
 	// Start FFMPEG with the URL, piping stdout to our audio buffer
@@ -241,7 +252,9 @@ func (s *squeezebox1) Play(videoID string) (cancel func()) {
 
 	err = fcmd.Start()
 	if err != nil {
-		panic(err)
+		logger.Errorw("unable to start ffmpeg stream",
+			"err", err)
+		return
 	}
 
 	// Wait until with have at least AUDIO_PRELOAD seconds of audio in our buffer
@@ -259,9 +272,10 @@ func (s *squeezebox1) Play(videoID string) (cancel func()) {
 	msg = append(msg, []byte("strm")...)
 	msg = append(msg, 's', '1', 'p', '1', '4', '2', '1', 0xff, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 41, 0, 0, 0, 0)
 	msg = append(msg, []byte(header)...)
-	fmt.Println(len(msg))
+	logger.Debugw("sending play",
+		"len", len(msg),
+		"dump", hex.Dump(msg))
 	s.conn.Write(msg)
-	fmt.Println(hex.Dump(msg))
 
 	return cancel
 }
@@ -279,9 +293,10 @@ func (s *squeezebox1) stop() {
 	binary.BigEndian.PutUint16(msg, uint16(28))
 	msg = append(msg, []byte("strm")...)
 	msg = append(msg, 'q', '1', 'p', '1', '4', '2', '1', 0xff, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 41, 0, 0, 0, 0)
-	fmt.Println(len(msg))
+	logger.Debugw("sending stop",
+		"len", len(msg),
+		"dump", hex.Dump(msg))
 	s.conn.Write(msg)
-	fmt.Println(hex.Dump(msg))
 }
 
 func (s *squeezebox1) Pause() {
@@ -290,9 +305,10 @@ func (s *squeezebox1) Pause() {
 	binary.BigEndian.PutUint16(msg, uint16(28))
 	msg = append(msg, []byte("strm")...)
 	msg = append(msg, 'p', '0', 'm', '?', '?', '?', '?', 0, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 41, 0, 0, 0, 0)
-	fmt.Println(len(msg))
+	logger.Debugw("sending pause",
+		"len", len(msg),
+		"dump", hex.Dump(msg))
 	s.conn.Write(msg)
-	fmt.Println(hex.Dump(msg))
 }
 
 func (s *squeezebox1) Unpause() {
@@ -301,9 +317,10 @@ func (s *squeezebox1) Unpause() {
 	binary.BigEndian.PutUint16(msg, uint16(28))
 	msg = append(msg, []byte("strm")...)
 	msg = append(msg, 'u', '0', 'm', '?', '?', '?', '?', 0, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 41, 0, 0, 0, 0)
-	fmt.Println(len(msg))
+	logger.Debugw("sending unpause",
+		"len", len(msg),
+		"dump", hex.Dump(msg))
 	s.conn.Write(msg)
-	fmt.Println(hex.Dump(msg))
 }
 
 func (s *squeezebox1) SetVolume(volume int) {
@@ -330,9 +347,10 @@ func (s *squeezebox1) SetVolume(volume int) {
 	binary.BigEndian.PutUint16(msg, uint16(4+len(i2c)))
 	msg = append(msg, []byte("i2cc")...)
 	msg = append(msg, []byte(i2c)...)
-	fmt.Println(len(msg))
+	logger.Debugw("sending volume",
+		"len", len(msg),
+		"dump", hex.Dump(msg))
 	s.conn.Write(msg)
-	fmt.Println(hex.Dump(msg))
 
 	s.volume = volume
 }
@@ -343,7 +361,7 @@ func (s *squeezebox1) GetVolume() int {
 
 func (s *squeezebox1) Render(buf []byte) {
 	if len(buf) != 560 {
-		panic("framebuffer has incorrect length")
+		logger.Panic("framebuffer has incorrect length")
 	}
 
 	// Send the current framebuffer to the Squeezebox

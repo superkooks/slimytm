@@ -24,12 +24,14 @@ func xplInit() {
 	var err error
 	sendAddr, err = net.ResolveUDPAddr("udp4", "255.255.255.255:3865")
 	if err != nil {
-		panic(err)
+		logger.Panicw("unable to resolve xPL broadcast addr",
+			"err", err)
 	}
 
 	xplPort, err = net.ListenUDP("udp4", nil)
 	if err != nil {
-		panic(err)
+		logger.Panicw("unable to open xPL listen addr",
+			"err", err)
 	}
 
 	go xplHeartbeat()
@@ -86,7 +88,9 @@ func xplListener() {
 		b := make([]byte, 1024)
 		n, err := xplPort.Read(b)
 		if err != nil {
-			panic(err)
+			logger.Errorw("unable to read xPL message",
+				"err", err)
+			continue
 		}
 
 		x := parseXPL(string(b[:n]))
@@ -100,7 +104,9 @@ func xplListener() {
 
 				d, err := strconv.Atoi(delay)
 				if err != nil {
-					panic("can't convert delay to integer")
+					logger.Errorw("unable to convert osd.basic delay to integer",
+						"err", err)
+					d = 5
 				}
 
 				for _, v := range queues {
@@ -108,7 +114,8 @@ func xplListener() {
 						cleaned := strings.TrimLeft(x.body["text"], "\\n")
 						cleaned = strings.TrimLeft(cleaned, "\n")
 
-						fmt.Println("************ GOT xPL for", v.Player.GetName())
+						logger.Debugw("received xPL",
+							"for", v.Player.GetName())
 						ctx, _ := context.WithTimeout(context.Background(), time.Second*time.Duration(d))
 						v.Texts = append(v.Texts, text{
 							bufs: v.Player.DisplayText(cleaned, ctx),
@@ -126,7 +133,8 @@ func xplListener() {
 func xplHeartbeat() {
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
-		panic(err)
+		logger.Panicw("unable to get ip interfaces",
+			"err", err)
 	}
 
 	var addr string
@@ -135,7 +143,8 @@ func xplHeartbeat() {
 
 		if a.IsGlobalUnicast() {
 			addr = a.String()
-			fmt.Println("using", addr, "as remote-ip")
+			logger.Infow("setting xPL remote-ip",
+				"addr", addr)
 			break
 		}
 	}

@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"log"
 	"math/rand"
 	"net"
 	"time"
@@ -46,35 +44,36 @@ const (
 var lastIR time.Time
 
 func tcpListener() {
-	addr, err := net.ResolveTCPAddr("tcp4", ":3483")
+	listener, err := net.ListenTCP("tcp", &net.TCPAddr{Port: 3483})
 	if err != nil {
-		panic(err)
-	}
-
-	listener, err := net.ListenTCP("tcp", addr)
-	if err != nil {
-		panic(err)
+		logger.Panicw("unable to start tcp listener",
+			"port", 3483,
+			"err", err)
 	}
 
 	for {
 		conn, err := listener.AcceptTCP()
 		if err != nil {
-			panic(err)
+			logger.Errorw("unable to accept tcp connection",
+				"err", err)
+			continue
 		}
 
-		fmt.Println("Received new tcp connection")
+		logger.Debug("received new tcp connection")
 
 		b := make([]byte, 1024)
 		_, err = conn.Read(b)
 		if err != nil {
-			panic(err)
+			logger.Errorw("unable to read from connection",
+				"err", err)
+			continue
 		}
 
 		if string(b[:4]) != "HELO" {
-			log.Println("didn't receive a HELO")
+			logger.DPanic("didn't receive a HELO")
 		}
 
-		fmt.Println("Squeezebox says HELO!")
+		logger.Debug("squeezebox says HELO!")
 
 		var c player
 		queue := &Queue{
@@ -82,20 +81,19 @@ func tcpListener() {
 		}
 
 		if b[8] == 2 {
-			fmt.Println("Connected to a Squeezebox v1")
 			c = &squeezebox1{id: rand.Intn(100000), conn: conn, Queue: queue, mac: net.HardwareAddr(b[10:16])}
 		} else if b[8] == 4 {
-			fmt.Println("Connected to a Squeezebox v2")
 			c = &squeezebox2{id: rand.Intn(100000), conn: conn, Queue: queue, mac: net.HardwareAddr(b[10:16])}
 		} else {
-			log.Println("non-squeezebox device tried to connect")
-			log.Println("(choosing to continue, acting like it's a sbox2)")
+			logger.Warnw("non-squeebox device tried to connect. pretending it is a sbox2")
 			c = &squeezebox2{id: rand.Intn(100000), conn: conn, Queue: queue, mac: net.HardwareAddr(b[10:16])}
 			// continue
 		}
 
-		fmt.Println("Firmware:", b[9])
-		fmt.Println("MAC:", net.HardwareAddr(b[10:16]).String())
+		logger.Infow("connected to a new squeezebox",
+			"assignedModel", c.GetModel(),
+			"firmware", b[9],
+			"mac", net.HardwareAddr(b[10:16]).String())
 
 		queue.Player = c
 		queues = append(queues, queue)
@@ -107,33 +105,34 @@ func tcpListener() {
 }
 
 func udpListener() {
-	addr, err := net.ResolveUDPAddr("udp4", ":3483")
+	listener, err := net.ListenUDP("udp", &net.UDPAddr{Port: 3483})
 	if err != nil {
-		panic(err)
-	}
-
-	listener, err := net.ListenUDP("udp", addr)
-	if err != nil {
-		panic(err)
+		logger.Panicw("unable to start udp listener",
+			"port", 3483,
+			"err", err)
 	}
 
 	for {
 		b := make([]byte, 1024)
 		_, remote, err := listener.ReadFromUDP(b)
 		if err != nil {
-			panic(err)
+			logger.Errorw("unable to read udp packet",
+				"err", err)
+			return
 		}
 
 		if b[0] != 'd' {
-			fmt.Println("received non-discovery request")
+			logger.Info("received non-discovery request")
 			continue
 		}
 
-		fmt.Println("Responding to discovery request from", remote.String())
+		logger.Debugw("responding to discovery request",
+			"from", remote.String())
 		encoder := charmap.ISO8859_10.NewEncoder()
 		resp, err := encoder.String("SlimYTM")
 		if err != nil {
-			panic(err)
+			logger.DPanicw("unable to encode text",
+				"err", err)
 		}
 		resp = "D" + resp
 
