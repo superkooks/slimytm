@@ -161,7 +161,7 @@ func (s *squeezebox2) Heartbeat() {
 		msg = append(msg, 't', '0', 'm', '?', '?', '?', '?', 0, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 41, 0, 0, 0, 0)
 		logger.Debugw("sending heartbeat",
 			"len", len(msg),
-			"dump", hex.Dump(msg))
+			"data", msg)
 		_, err := s.conn.Write(msg)
 		if err != nil {
 			// Client probably dropped conn
@@ -272,7 +272,7 @@ func (s *squeezebox2) Play(videoID string) (cancel func()) {
 	msg = append(msg, []byte(header)...)
 	logger.Debugw("sending play",
 		"len", len(msg),
-		"dump", hex.Dump(msg))
+		"data", msg)
 	s.conn.Write(msg)
 
 	s.Queue.Playing = true
@@ -297,7 +297,7 @@ func (s *squeezebox2) stop() {
 	msg = append(msg, 'q', '1', 'p', '1', '4', '2', '1', 0xff, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 41, 0, 0, 0, 0)
 	logger.Debugw("sending stop",
 		"len", len(msg),
-		"dump", hex.Dump(msg))
+		"data", msg)
 	s.conn.Write(msg)
 }
 
@@ -309,7 +309,7 @@ func (s *squeezebox2) Pause() {
 	msg = append(msg, 'p', '0', 'm', '?', '?', '?', '?', 0, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 41, 0, 0, 0, 0)
 	logger.Debugw("sending pause",
 		"len", len(msg),
-		"dump", hex.Dump(msg))
+		"data", msg)
 	s.conn.Write(msg)
 }
 
@@ -321,7 +321,7 @@ func (s *squeezebox2) Unpause() {
 	msg = append(msg, 'u', '0', 'm', '?', '?', '?', '?', 0, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 41, 0, 0, 0, 0)
 	logger.Debugw("sending unpause",
 		"len", len(msg),
-		"dump", hex.Dump(msg))
+		"data", msg)
 	s.conn.Write(msg)
 }
 
@@ -364,7 +364,7 @@ func (s *squeezebox2) SetVolume(volume int) {
 	msg = append(msg, newGain...)
 	logger.Debugw("sending volume",
 		"len", len(msg),
-		"dump", hex.Dump(msg))
+		"data", msg)
 	s.conn.Write(msg)
 
 	s.volume = volume

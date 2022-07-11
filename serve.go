@@ -10,6 +10,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 var upgrader = websocket.Upgrader{
@@ -126,6 +127,8 @@ func main() {
 	conf.OutputPaths = append(conf.OutputPaths, persistent.LogLocations...)
 	conf.Development = true
 	conf.Level.SetLevel(zap.DebugLevel)
+	conf.EncoderConfig = zap.NewProductionEncoderConfig()
+	conf.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 
 	l, err := conf.Build()
 	if err != nil {
