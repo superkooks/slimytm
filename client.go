@@ -78,6 +78,7 @@ func (c *Client) Listener() {
 			}
 
 			queue.Player.SetVolume(v)
+			queue.UpdateClients()
 		} else {
 			logger.Warnw("received unknown event from web client",
 				"event", e.Type)
