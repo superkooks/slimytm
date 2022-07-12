@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 type Song struct {
@@ -55,9 +57,63 @@ type Queue struct {
 
 var queues []*Queue
 
+var metricQueueLength = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	Name: "slimytm_queue_length",
+	Help: "The current length of the queue",
+}, []string{"player"})
+
+var metricQueueIndex = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	Name: "slimytm_queue_index",
+	Help: "The current index of the queue",
+}, []string{"player"})
+
+var metricBufferLength = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	Name: "slimytm_buffer_length_bytes",
+	Help: "The current length of the audio buffer in bytes",
+}, []string{"player"})
+
+var metricPlayState = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	Name: "slimytm_play_state",
+	Help: "The current state of play. 3=loading, 2=paused, 1=playing, 0=not_playing",
+}, []string{"player"})
+
+var metricFrameTiming = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	Name:    "slimytm_frame_timing_seconds",
+	Help:    "How long it takes to generate and send a frame",
+	Buckets: prometheus.ExponentialBuckets(0.025, 1.5, 7),
+}, []string{"player"})
+
+var metricSecondsPlayed = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "slimytm_played_audio_seconds_total",
+	Help: "The total number of seconds of audio that has been played",
+}, []string{"player"})
+
 func (q *Queue) Watch() {
 	for {
+		// Update metrics
+		metricQueueLength.WithLabelValues(q.Player.GetName()).Set(float64(len(q.Songs)))
+		metricQueueLength.WithLabelValues(q.Player.GetName()).Set(float64(q.Index))
+
+		if q.Buffer != nil {
+			metricBufferLength.WithLabelValues(q.Player.GetName()).Set(float64(q.Buffer.Len()))
+		} else {
+			metricBufferLength.WithLabelValues(q.Player.GetName()).Set(0)
+		}
+
+		if q.Loading {
+			metricPlayState.WithLabelValues(q.Player.GetName()).Set(3)
+		} else if q.Paused {
+			metricPlayState.WithLabelValues(q.Player.GetName()).Set(2)
+		} else if q.Playing {
+			metricPlayState.WithLabelValues(q.Player.GetName()).Set(1)
+		} else {
+			metricPlayState.WithLabelValues(q.Player.GetName()).Set(0)
+		}
+
+		// Check whether we have finished a song
 		if q.Playing && len(q.Songs) > 0 && q.Index >= 0 && q.Index < len(q.Songs) {
+			metricSecondsPlayed.WithLabelValues(q.Player.GetName()).Add(0.1)
+
 			songTimes := strings.Split(q.Songs[q.Index].Duration, ":")
 			mins, _ := strconv.Atoi(songTimes[0])
 			secs, _ := strconv.Atoi(songTimes[1])
@@ -65,7 +121,7 @@ func (q *Queue) Watch() {
 			if q.ElapsedSecs >= mins*60+secs-1 {
 				logger.Debug("reached end of song")
 				if q.Index+1 < len(q.Songs) {
-					logger.Debug("playing next song")
+					logger.Debug("will play next song")
 					q.Next()
 				} else {
 					logger.Debug("reached end of queue")
@@ -79,6 +135,10 @@ func (q *Queue) Watch() {
 }
 
 func (q *Queue) Next() {
+	logger.Debugw("next song called",
+		"index", q.Index,
+		"queueLen", len(q.Songs))
+
 	q.Player.Stop()
 	if q.CancelPlaying != nil {
 		q.CancelPlaying()
@@ -91,15 +151,21 @@ func (q *Queue) Next() {
 
 	// Don't run over the end of the queue
 	if q.Index < len(q.Songs) {
+		logger.Debug("loading next song")
 		q.Loading = true
 		q.UpdateClients()
 		q.CancelPlaying = q.Player.Play(q.Songs[q.Index].ID)
 	} else {
+		logger.Debug("no more songs left")
 		q.Reset()
 	}
 }
 
 func (q *Queue) Previous() {
+	logger.Debugw("previous song called",
+		"index", q.Index,
+		"queueLen", len(q.Songs))
+
 	q.Player.Stop()
 	if q.CancelPlaying != nil {
 		q.CancelPlaying()
@@ -122,8 +188,10 @@ func (q *Queue) Previous() {
 func (q *Queue) Pause() {
 	if q.Paused {
 		q.Player.Unpause()
+		logger.Debug("queue unpaused")
 	} else {
 		q.Player.Pause()
+		logger.Debug("queue paused")
 	}
 
 	q.Paused = !q.Paused
@@ -132,6 +200,8 @@ func (q *Queue) Pause() {
 }
 
 func (q *Queue) Reset() {
+	logger.Debug("queue reset")
+
 	q.Player.Stop()
 	if q.CancelPlaying != nil {
 		q.CancelPlaying()
@@ -220,6 +290,7 @@ func (q *Queue) Composite() {
 		},
 	}
 
+	frameTime := time.Now()
 	for {
 		top := q.Texts[len(q.Texts)-1]
 
@@ -238,6 +309,8 @@ func (q *Queue) Composite() {
 
 		// Render the top buffer
 		q.Player.Render(<-top.bufs)
+		metricFrameTiming.WithLabelValues(q.Player.GetName()).Observe(float64(time.Since(frameTime)) / float64(time.Second))
+		frameTime = time.Now()
 
 		// Animate the screen at 30 fps
 		time.Sleep(time.Millisecond * 33)

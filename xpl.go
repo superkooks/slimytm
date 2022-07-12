@@ -7,6 +7,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 type xplMessage struct {
@@ -19,6 +22,16 @@ type xplMessage struct {
 
 var xplPort *net.UDPConn
 var sendAddr *net.UDPAddr
+
+var metricXPLProcessed = promauto.NewCounter(prometheus.CounterOpts{
+	Name: "slimytm_xpl_processed_total",
+	Help: "The total number of xPL messages that have been processed and accepted",
+})
+
+var metricXPLSent = promauto.NewCounter(prometheus.CounterOpts{
+	Name: "slimytm_xpl_sent_total",
+	Help: "The total number of xPL messages that have been sent",
+})
 
 func xplInit() {
 	var err error
@@ -38,6 +51,7 @@ func xplInit() {
 }
 
 func sendXPL(m xplMessage, source string) {
+	metricXPLSent.Inc()
 	out := compileXPL(m, source)
 	xplPort.WriteToUDP([]byte(out), sendAddr)
 }
@@ -97,6 +111,8 @@ func xplListener() {
 		target := strings.Split(x.target, ".")
 		if target[0] == "slimdev-slimserv" {
 			if x.schema == "osd.basic" {
+				metricXPLProcessed.Inc()
+
 				delay, ok := x.body["delay"]
 				if !ok {
 					delay = "5"

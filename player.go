@@ -6,6 +6,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"golang.org/x/text/encoding/charmap"
 )
 
@@ -42,6 +44,27 @@ const (
 
 // lastIR is global to prevent multiple players picking up the same signal
 var lastIR time.Time
+
+var metricConnectedPlayers = promauto.NewGauge(prometheus.GaugeOpts{
+	Name: "slimytm_connected_players",
+	Help: "The number of players currently connected",
+})
+
+var metricLoadTime = promauto.NewHistogram(prometheus.HistogramOpts{
+	Name:    "slimytm_load_time_seconds",
+	Help:    "How long it takes to go from the command for next song to playing audio",
+	Buckets: prometheus.LinearBuckets(0, 1.5, 15),
+})
+
+var metricPacketsTx = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "slimytm_packets_tx_total",
+	Help: "The total number of packets sent",
+}, []string{"player"})
+
+var metricPacketsRx = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "slimytm_packets_rx_total",
+	Help: "The total number of packets received",
+}, []string{"player"})
 
 func tcpListener() {
 	listener, err := net.ListenTCP("tcp", &net.TCPAddr{Port: 3483})
@@ -101,6 +124,8 @@ func tcpListener() {
 		go c.Listener()
 		go c.Heartbeat()
 		go queue.Watch()
+
+		metricConnectedPlayers.Inc()
 	}
 }
 

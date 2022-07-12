@@ -32,7 +32,11 @@ func (s *squeezebox1) GetModel() string {
 }
 
 func (s *squeezebox1) GetName() string {
-	return persistent.Clients[s.mac.String()].Name
+	if v, ok := persistent.Clients[s.mac.String()]; ok {
+		return v.Name
+	}
+
+	return s.mac.String()
 }
 
 func (s *squeezebox1) Listener() {
@@ -72,6 +76,7 @@ func (s *squeezebox1) Listener() {
 
 			logger.DPanic("player has timed out")
 			s.conn.Close()
+			metricConnectedPlayers.Dec()
 			return
 		} else if err != nil {
 			logger.Errorw("unable to read from connection",
@@ -82,6 +87,8 @@ func (s *squeezebox1) Listener() {
 		logger.Debugw("new packet",
 			"len", n,
 			"data", b[:n])
+
+		metricPacketsRx.WithLabelValues(s.GetName()).Inc()
 
 		if string(b[:4]) == "STAT" {
 			// Status message from the squeezebox
@@ -170,6 +177,7 @@ func (s *squeezebox1) Heartbeat() {
 				"err", err)
 			return
 		}
+		metricPacketsTx.WithLabelValues(s.GetName()).Inc()
 
 		time.Sleep(HEARTBEAT_INTERVAL)
 	}
@@ -230,6 +238,8 @@ func (s *squeezebox1) DisplayText(text string, ctx context.Context) chan []byte 
 }
 
 func (s *squeezebox1) Play(videoID string) (cancel func()) {
+	start := time.Now()
+
 	// Get the player URL with youtube-dl
 	co := exec.Command("youtube-dl", "https://music.youtube.com/watch?v="+videoID, "-f", "bestaudio[ext=webm]", "-g")
 	logger.Debugw("getting audio download url",
@@ -274,8 +284,12 @@ func (s *squeezebox1) Play(videoID string) (cancel func()) {
 	msg = append(msg, []byte(header)...)
 	logger.Debugw("sending play",
 		"len", len(msg),
-		"data", msg)
+		"data", msg,
+		"elapsedMs", time.Since(start)/time.Millisecond)
 	s.conn.Write(msg)
+	metricPacketsTx.WithLabelValues(s.GetName()).Inc()
+
+	metricLoadTime.Observe(float64(time.Since(start)) / float64(time.Second))
 
 	return cancel
 }
@@ -297,6 +311,7 @@ func (s *squeezebox1) stop() {
 		"len", len(msg),
 		"data", msg)
 	s.conn.Write(msg)
+	metricPacketsTx.WithLabelValues(s.GetName()).Inc()
 }
 
 func (s *squeezebox1) Pause() {
@@ -309,6 +324,7 @@ func (s *squeezebox1) Pause() {
 		"len", len(msg),
 		"data", msg)
 	s.conn.Write(msg)
+	metricPacketsTx.WithLabelValues(s.GetName()).Inc()
 }
 
 func (s *squeezebox1) Unpause() {
@@ -321,6 +337,7 @@ func (s *squeezebox1) Unpause() {
 		"len", len(msg),
 		"data", msg)
 	s.conn.Write(msg)
+	metricPacketsTx.WithLabelValues(s.GetName()).Inc()
 }
 
 func (s *squeezebox1) SetVolume(volume int) {
@@ -351,6 +368,7 @@ func (s *squeezebox1) SetVolume(volume int) {
 		"len", len(msg),
 		"data", msg)
 	s.conn.Write(msg)
+	metricPacketsTx.WithLabelValues(s.GetName()).Inc()
 
 	s.volume = volume
 }
@@ -371,6 +389,7 @@ func (s *squeezebox1) Render(buf []byte) {
 	msg = append(msg, 0x02, 0x30)
 	msg = append(msg, buf...)
 	s.conn.Write(msg)
+	metricPacketsTx.WithLabelValues(s.GetName()).Inc()
 }
 
 // Displays the whole buffer forever until it cancelled

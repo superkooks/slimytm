@@ -6,6 +6,8 @@ import (
 
 	"github.com/Jeffail/gabs/v2"
 	"github.com/gorilla/websocket"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 type Event struct {
@@ -26,6 +28,11 @@ type Client struct {
 
 var clients []*Client
 
+var metricConnectedClients = promauto.NewGauge(prometheus.GaugeOpts{
+	Name: "slimytm_connected_clients",
+	Help: "The number of clients currently connected",
+})
+
 func (c *Client) Listener() {
 	for {
 		var e Event
@@ -33,6 +40,7 @@ func (c *Client) Listener() {
 		if err != nil {
 			logger.Debugw("client disconnected",
 				"err", err)
+			metricConnectedClients.Dec()
 			return
 		}
 

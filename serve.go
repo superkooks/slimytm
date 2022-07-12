@@ -9,6 +9,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -78,6 +79,7 @@ func ws(w http.ResponseWriter, r *http.Request) {
 	// Add the client to our list
 	c := &Client{Conn: conn}
 	clients = append(clients, c)
+	metricConnectedClients.Inc()
 
 	// Set the close handler on the ws connection
 	conn.SetCloseHandler(func(code int, text string) error {
@@ -153,6 +155,7 @@ func main() {
 	r.Path("/players").HandlerFunc(getPlayers)
 	r.Path("/player/{id}/audio.wav").HandlerFunc(audio)
 	r.Path("/ws").HandlerFunc(ws)
+	r.Path("/metrics").Handler(promhttp.Handler())
 
 	logger.Panicw("unable to start http server",
 		"port", 9001,
