@@ -16,15 +16,14 @@ import (
 type squeezebox2 struct {
 	Queue *Queue
 
-	id     int
 	conn   *net.TCPConn
 	font   psfFont
 	volume int
 	mac    net.HardwareAddr
 }
 
-func (s *squeezebox2) GetID() int {
-	return s.id
+func (s *squeezebox2) GetID() string {
+	return s.mac.String()
 }
 
 func (s *squeezebox2) GetModel() string {
@@ -274,7 +273,7 @@ func (s *squeezebox2) Play(videoID string) (cancel func()) {
 	}
 
 	// Send the strm command to the Squeezebox
-	header := fmt.Sprintf("GET /player/%v/audio.wav HTTP/1.0\n\n", s.id)
+	header := fmt.Sprintf("GET /player/%v/audio.wav HTTP/1.0\n\n", s.GetID())
 	msg := make([]byte, 2)
 	binary.BigEndian.PutUint16(msg, uint16(28+len(header)))
 	msg = append(msg, []byte("strm")...)

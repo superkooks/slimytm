@@ -46,7 +46,7 @@ const Playlist = {
     
     methods: {
         playSong(event) {
-            this.$store.dispatch("playSong", {player: Number(this.$route.params.player), playlist: this.$store.state.currentPlaylist, song: event})
+            this.$store.dispatch("playSong", {player: this.$route.params.player, playlist: this.$store.state.currentPlaylist, song: event})
         }
     }
 }
@@ -103,16 +103,16 @@ app.component("player-controls", {
 <div id="playerControls" v-if="Object.keys(playerState.song).length > 0 || playerState.loading">
 
     <div id="playerControlButtons">
-        <span class="material-icons md-48" @click="$store.dispatch('previousSong', Number($route.params.player))">
+        <span class="material-icons md-48" @click="$store.dispatch('previousSong', $route.params.player)">
             skip_previous
         </span>
-        <span class="material-icons md-48" v-if="playerState.paused" @click="$store.dispatch('pauseSong', Number($route.params.player))">
+        <span class="material-icons md-48" v-if="playerState.paused" @click="$store.dispatch('pauseSong', $route.params.player)">
             play_arrow
         </span>
-        <span class="material-icons md-48" v-else @click="$store.dispatch('pauseSong', Number($route.params.player))">
+        <span class="material-icons md-48" v-else @click="$store.dispatch('pauseSong', $route.params.player)">
             pause
         </span>
-        <span class="material-icons md-48" @click="$store.dispatch('nextSong', Number($route.params.player))">
+        <span class="material-icons md-48" @click="$store.dispatch('nextSong', $route.params.player)">
             skip_next
         </span>
     </div>
@@ -163,7 +163,7 @@ app.component("player-controls", {
     methods: {
         setVolume(event) {
             this.$store.dispatch("setVolume", {
-                player: Number(this.$route.params.player),
+                player: this.$route.params.player,
                 volume: Number(event.target.value),
             })
         }

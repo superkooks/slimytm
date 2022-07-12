@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"math/rand"
 	"net"
 	"time"
 
@@ -13,7 +12,7 @@ import (
 
 // player represents a squeezebox device
 type player interface {
-	GetID() int
+	GetID() string
 	GetModel() string
 	GetName() string
 	Listener()
@@ -104,12 +103,12 @@ func tcpListener() {
 		}
 
 		if b[8] == 2 {
-			c = &squeezebox1{id: rand.Intn(100000), conn: conn, Queue: queue, mac: net.HardwareAddr(b[10:16])}
+			c = &squeezebox1{conn: conn, Queue: queue, mac: net.HardwareAddr(b[10:16])}
 		} else if b[8] == 4 {
-			c = &squeezebox2{id: rand.Intn(100000), conn: conn, Queue: queue, mac: net.HardwareAddr(b[10:16])}
+			c = &squeezebox2{conn: conn, Queue: queue, mac: net.HardwareAddr(b[10:16])}
 		} else {
 			logger.Warnw("non-squeebox device tried to connect. pretending it is a sbox2")
-			c = &squeezebox2{id: rand.Intn(100000), conn: conn, Queue: queue, mac: net.HardwareAddr(b[10:16])}
+			c = &squeezebox2{conn: conn, Queue: queue, mac: net.HardwareAddr(b[10:16])}
 			// continue
 		}
 

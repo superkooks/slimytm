@@ -41,7 +41,7 @@ func audio(w http.ResponseWriter, r *http.Request) {
 func getPlayers(w http.ResponseWriter, r *http.Request) {
 	// Inlining a struct seems like the simplest solution
 	type resp struct {
-		ID   int    `json:"id"`
+		ID   string `json:"id"`
 		Name string `json:"name"`
 		Type string `json:"type"`
 		// Thumbnail string `json:"thumbnail"`

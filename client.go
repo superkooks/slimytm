@@ -12,7 +12,7 @@ import (
 
 type Event struct {
 	Type   string          `json:"type"`
-	Player int             `json:"player"`
+	Player string          `json:"player"`
 	Data   json.RawMessage `json:"data"`
 }
 
