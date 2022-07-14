@@ -42,6 +42,23 @@ hr {
     margin-bottom: 0px;
 }
 
+.button {
+    border: 1px solid #000000;
+    border-radius: 4px;
+    padding: 10px;
+    max-width: fit-content;
+    cursor: pointer;
+    background-color: #ffffff;
+    transition: all 0.15s;
+
+    display: flex;
+    align-items: center;
+}
+
+.button:hover {
+    background-color: #f2f2f2;
+}
+
 #playerControls {
     height: 70px;
     flex-shrink: 0;

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"math/rand"
 	"net/http"
 
 	"github.com/Jeffail/gabs/v2"
@@ -20,6 +21,7 @@ type PlayEvent struct {
 	QueueType string          `json:"queueType"`
 	QueueID   string          `json:"queueId"`
 	StartSong json.RawMessage `json:"startSong"`
+	Shuffle   bool            `json:"shuffle"`
 }
 
 type Client struct {
@@ -106,6 +108,7 @@ func (c *Client) PlaySongs(q *Queue, p PlayEvent) {
 	q.Next()
 
 	// Retrieve the rest of the songs and enqueue them
+	var songs []Song
 	switch p.QueueType {
 	case "playlist":
 		resp, err := http.Get("http://localhost:9000/api/playlist/" + p.QueueID)
@@ -122,21 +125,41 @@ func (c *Client) PlaySongs(q *Queue, p PlayEvent) {
 			return
 		}
 
-		err = json.Unmarshal(playlist.Path("tracks").Bytes(), &q.Songs)
+		err = json.Unmarshal(playlist.Path("tracks").Bytes(), &songs)
 		if err != nil {
 			logger.Errorw("unable to get tracks from playlist info",
 				"err", err)
 			return
 		}
 
+	default:
+		logger.Warn("unknown queue type")
+		return
+	}
+
+	if p.Shuffle {
+		logger.Debug("shuffling playlist")
+		rand.Shuffle(len(songs), func(i, j int) { songs[i], songs[j] = songs[j], songs[i] })
+
+		// Remove the already playing song from the list
+		for k, v := range songs {
+			if startSong.ID == v.ID {
+				songs = append(songs[:k], songs[k+1:]...)
+				break
+			}
+		}
+
+		q.Songs = append(q.Songs, songs...)
+
+	} else {
+		q.Songs = songs
+
 		for k, v := range q.Songs {
 			// Set the queue index to the start song
 			if startSong.ID == v.ID {
 				q.Index = k
+				break
 			}
 		}
-
-	default:
-		logger.Warn("unknown queue type")
 	}
 }

@@ -57,7 +57,11 @@ const store = Vuex.createStore({
 
         // WS Sends
         playSong(context, e) {
-            data = {queueType: "playlist", queueId: e.playlist.id, startSong: e.song}
+            data = {queueType: "playlist", queueId: e.playlist.id, startSong: e.song, shuffle: false}
+            context.state.ws.send(JSON.stringify({type: "PLAY", player: e.player, data: data}))
+        },
+        shuffle(context, e) {
+            data = {queueType: "playlist", queueId: e.playlist.id, startSong: e.song, shuffle: true}
             context.state.ws.send(JSON.stringify({type: "PLAY", player: e.player, data: data}))
         },
         setVolume(context, e) {

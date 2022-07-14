@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"time"
 
@@ -120,6 +121,9 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 // Entrypoint
 func main() {
+	// Seed random number generator
+	rand.Seed(time.Now().UTC().UnixNano())
+
 	// Load persistent data
 	LoadPersistent()
 

@@ -30,6 +30,11 @@ const Playlist = {
                 <h1 id="playlistTitle">{{ $store.state.currentPlaylist.title }}</h1>
                 <p id="playlistCount">{{ $store.state.currentPlaylist.trackCount }} songs</p>
                 <p id="playlistDuration">{{ $store.state.currentPlaylist.duration }}</p>
+
+                <p class="button" style="margin-top: 35px;" @click="shuffle">
+                    <span class="material-icons" style="margin-right: 5px;">shuffle</span>
+                    Shuffle
+                </p>
             </div>
         </div>
         <div id="songs">
@@ -47,6 +52,14 @@ const Playlist = {
     methods: {
         playSong(event) {
             this.$store.dispatch("playSong", {player: this.$route.params.player, playlist: this.$store.state.currentPlaylist, song: event})
+        },
+
+        shuffle() {
+            // JS doesn't have a random element function?
+            // are you kidding me?
+            let song = this.$store.state.currentPlaylist.tracks[this.$store.state.currentPlaylist.tracks.length * Math.random() | 0]
+
+            this.$store.dispatch("shuffle", {player: this.$route.params.player, playlist: this.$store.state.currentPlaylist, song: song})
         }
     }
 }
