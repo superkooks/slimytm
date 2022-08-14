@@ -47,6 +47,11 @@ func readPSF(f *os.File) psfFont {
 }
 
 func (p psfFont) getChar(chr int) []byte {
+	if chr > 127 {
+		// Ignore all unicode
+		chr = 'a'
+	}
+
 	char := make([]byte, p.BytesPerGlyph)
 	for k := range char {
 		char[k] = p.GlyphBuffer[chr*int(p.BytesPerGlyph)+k]
