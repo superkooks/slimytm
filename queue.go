@@ -92,7 +92,7 @@ func (q *Queue) Watch() {
 	for {
 		// Update metrics
 		metricQueueLength.WithLabelValues(q.Player.GetName()).Set(float64(len(q.Songs)))
-		metricQueueLength.WithLabelValues(q.Player.GetName()).Set(float64(q.Index))
+		metricQueueIndex.WithLabelValues(q.Player.GetName()).Set(float64(q.Index))
 
 		if q.Buffer != nil {
 			metricBufferLength.WithLabelValues(q.Player.GetName()).Set(float64(q.Buffer.Len()))

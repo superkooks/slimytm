@@ -128,8 +128,7 @@ func main() {
 	LoadPersistent()
 
 	// Start the logger
-	var conf zap.Config
-	conf = zap.NewProductionConfig()
+	conf := zap.NewProductionConfig()
 	conf.OutputPaths = append(conf.OutputPaths, persistent.LogLocations...)
 	conf.Development = true
 	conf.Level.SetLevel(zap.DebugLevel)

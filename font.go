@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/binary"
-	"io/ioutil"
+	"io"
 	"os"
 )
 
@@ -40,7 +40,7 @@ func readPSF(f *os.File) psfFont {
 	}
 
 	f.Seek(32, 0)
-	b, _ := ioutil.ReadAll(f)
+	b, _ := io.ReadAll(f)
 	p.GlyphBuffer = b
 
 	return p
