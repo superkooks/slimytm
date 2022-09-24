@@ -172,7 +172,7 @@ func (s *squeezebox1) Heartbeat() {
 		_, err := s.conn.Write(msg)
 		if err != nil {
 			// Client probably dropped conn
-			logger.DPanic("could not send heartbeat",
+			logger.DPanicw("could not send heartbeat",
 				"err", err)
 			return
 		}

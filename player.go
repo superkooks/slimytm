@@ -93,6 +93,7 @@ func tcpListener() {
 
 		if string(b[:4]) != "HELO" {
 			logger.DPanic("didn't receive a HELO")
+			continue
 		}
 
 		logger.Debug("squeezebox says HELO!")
@@ -155,7 +156,7 @@ func udpListener() {
 		encoder := charmap.ISO8859_10.NewEncoder()
 		resp, err := encoder.String("SlimYTM")
 		if err != nil {
-			logger.DPanicw("unable to encode text",
+			logger.Panicw("unable to encode text",
 				"err", err)
 		}
 		resp = "D" + resp
