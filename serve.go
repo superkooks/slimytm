@@ -32,7 +32,7 @@ func audio(w http.ResponseWriter, r *http.Request) {
 			logger.Debugw("new audio request",
 				"player", v.Player.GetID(),
 				"bufLen", v.Buffer.Len(),
-				"bufSecs", v.Buffer.Len()/48000/2/2)
+				"bufSecs", v.Buffer.Len()/44100/2/2)
 			io.Copy(w, v.Buffer)
 			return
 		}

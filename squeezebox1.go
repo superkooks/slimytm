@@ -96,7 +96,7 @@ func (s *squeezebox1) Listener() {
 			}
 
 			bytesPlayed := int(binary.BigEndian.Uint64(b[23:31])) - int(binary.BigEndian.Uint32(b[19:23]))
-			s.Queue.ElapsedSecs = bytesPlayed / 48000 / 2 / 2
+			s.Queue.ElapsedSecs = bytesPlayed / 44100 / 2 / 2
 
 		} else if string(b[:4]) == "IR  " {
 			if time.Since(lastIR) < IR_INTERVAL {
@@ -266,7 +266,7 @@ retry:
 	s.Queue.Buffer.Reset()
 	ctx, cancel := context.WithCancel(context.Background())
 	fcmd := exec.CommandContext(ctx, "ffmpeg", "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5", "-i",
-		string(url), "-f", "wav", "-ar", "48000", "-ac", "2", "-loglevel", "warning", "-vn", "-")
+		string(url), "-f", "wav", "-ar", "44100", "-ac", "2", "-loglevel", "warning", "-vn", "-")
 	fcmd.Stdout = s.Queue.Buffer
 	fcmd.Stderr = os.Stderr
 
@@ -280,7 +280,7 @@ retry:
 	// Wait until with have at least AUDIO_PRELOAD seconds of audio in our buffer
 	for {
 		time.Sleep(50 * time.Millisecond)
-		if s.Queue.Buffer.Len() > 48000*2*2*AUDIO_PRELOAD {
+		if s.Queue.Buffer.Len() > 44100*2*2*AUDIO_PRELOAD {
 			break
 		}
 	}
@@ -290,7 +290,7 @@ retry:
 	msg := make([]byte, 2)
 	binary.BigEndian.PutUint16(msg, uint16(28+len(header)))
 	msg = append(msg, []byte("strm")...)
-	msg = append(msg, 's', '1', 'p', '1', '4', '2', '1', 0xff, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 41, 0, 0, 0, 0)
+	msg = append(msg, 's', '1', 'p', '1', '3', '2', '1', 0xff, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 41, 0, 0, 0, 0)
 	msg = append(msg, []byte(header)...)
 	logger.Debugw("sending play",
 		"len", len(msg),
@@ -316,7 +316,7 @@ func (s *squeezebox1) stop() {
 	msg := make([]byte, 2)
 	binary.BigEndian.PutUint16(msg, uint16(28))
 	msg = append(msg, []byte("strm")...)
-	msg = append(msg, 'q', '1', 'p', '1', '4', '2', '1', 0xff, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 41, 0, 0, 0, 0)
+	msg = append(msg, 'q', '1', 'p', '1', '3', '2', '1', 0xff, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 41, 0, 0, 0, 0)
 	logger.Debugw("sending stop",
 		"len", len(msg),
 		"data", msg)
