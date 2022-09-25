@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -234,8 +235,9 @@ retry:
 	co := exec.Command("youtube-dl", "https://music.youtube.com/watch?v="+videoID, "-f", "bestaudio[ext=webm]", "-g")
 	logger.Debugw("getting audio download url",
 		"cmd", co.String())
-	url, err := co.CombinedOutput()
-	logger.Debugw("youtube-dl command output", "output", string(url))
+	b, err := co.CombinedOutput()
+	url := strings.Trim(string(b), " \n")
+	logger.Debugw("youtube-dl command output", "output", url)
 	if err != nil {
 		logger.Errorw("unable to get audio download url",
 			"err", err)
@@ -244,14 +246,15 @@ retry:
 
 	// Ensure the url that youtube music returns is actually valid
 	// (stupid google sometimes returns urls that 403)
-	resp, err := http.DefaultClient.Head(string(url))
+	resp, err := http.DefaultClient.Head(url)
 	if err != nil {
-		logger.Panicw("could not request youtube music url",
+		logger.DPanicw("could not request youtube music url",
 			"err", err)
+		return
 	}
 	if resp.StatusCode != 200 {
 		logger.Warnw("youtube music did not return 200 for url, retrying",
-			"url", string(url),
+			"url", url,
 			"status", resp.Status)
 
 		goto retry
