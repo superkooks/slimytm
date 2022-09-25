@@ -95,8 +95,6 @@ func (s *squeezebox2) Listener() {
 			}
 
 			s.Queue.ElapsedSecs = int(binary.BigEndian.Uint32(b[45:49]))
-			logger.Debugw("STAT",
-				"type", string(b[8:12]))
 
 		} else if string(b[:4]) == "IR  " {
 			if time.Since(lastIR) < IR_INTERVAL {
@@ -248,7 +246,7 @@ retry:
 	// (stupid google sometimes returns urls that 403)
 	resp, err := http.DefaultClient.Head(string(url))
 	if err != nil {
-		logger.Panic("could not request youtube music url",
+		logger.Panicw("could not request youtube music url",
 			"err", err)
 	}
 	if resp.StatusCode != 200 {
