@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"time"
@@ -228,25 +229,41 @@ func (s *squeezebox2) DisplayText(text string, ctx context.Context) chan []byte 
 }
 
 func (s *squeezebox2) Play(videoID string) (cancel func()) {
+retry:
 	start := time.Now()
 
 	// Get the player URL with youtube-dl
 	co := exec.Command("youtube-dl", "https://music.youtube.com/watch?v="+videoID, "-f", "bestaudio[ext=webm]", "-g")
 	logger.Debugw("getting audio download url",
 		"cmd", co.String())
-	b, err := co.CombinedOutput()
-	logger.Debugw("youtube-dl command output", "output", string(b))
+	url, err := co.CombinedOutput()
+	logger.Debugw("youtube-dl command output", "output", string(url))
 	if err != nil {
 		logger.Errorw("unable to get audio download url",
 			"err", err)
 		return
 	}
 
+	// Ensure the url that youtube music returns is actually valid
+	// (stupid google sometimes returns urls that 403)
+	resp, err := http.DefaultClient.Head(string(url))
+	if err != nil {
+		logger.Panic("could not request youtube music url",
+			"err", err)
+	}
+	if resp.StatusCode != 200 {
+		logger.Warnw("youtube music did not return 200 for url, retrying",
+			"url", string(url),
+			"status", resp.Status)
+
+		goto retry
+	}
+
 	// Start FFMPEG with the URL, piping stdout to our audio buffer
 	s.Queue.Buffer.Reset()
 	ctx, cancel := context.WithCancel(context.Background())
 	fcmd := exec.CommandContext(ctx, "ffmpeg", "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5", "-i",
-		string(b), "-f", "wav", "-ar", "48000", "-ac", "2", "-loglevel", "warning", "-vn", "-")
+		string(url), "-f", "wav", "-ar", "48000", "-ac", "2", "-loglevel", "warning", "-vn", "-")
 	fcmd.Stdout = s.Queue.Buffer
 	fcmd.Stderr = os.Stderr
 

@@ -30,6 +30,7 @@ func audio(w http.ResponseWriter, r *http.Request) {
 	for _, v := range queues {
 		if fmt.Sprint(v.Player.GetID()) == vars["id"] {
 			logger.Debugw("new audio request",
+				"player", v.Player.GetID(),
 				"bufLen", v.Buffer.Len(),
 				"bufSecs", v.Buffer.Len()/48000/2/2)
 			io.Copy(w, v.Buffer)
