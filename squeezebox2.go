@@ -64,7 +64,7 @@ func (s *squeezebox2) Listener() {
 	for {
 		b := make([]byte, 1024)
 		s.conn.SetReadDeadline(time.Now().Add(HEARTBEAT_INTERVAL * 3))
-		n, err := s.conn.Read(b)
+		_, err := s.conn.Read(b)
 		if errors.Is(err, os.ErrDeadlineExceeded) {
 			// Client has timed out, remove its queue
 			for k, v := range queues {
@@ -82,10 +82,6 @@ func (s *squeezebox2) Listener() {
 				"err", err)
 			return
 		}
-
-		logger.Debugw("new packet",
-			"len", n,
-			"data", b[:n])
 
 		metricPacketsRx.WithLabelValues(s.GetName()).Inc()
 
@@ -165,9 +161,6 @@ func (s *squeezebox2) Heartbeat() {
 		binary.BigEndian.PutUint16(msg, uint16(28))
 		msg = append(msg, []byte("strm")...)
 		msg = append(msg, 't', '0', 'm', '?', '?', '?', '?', 0, 0, 0, '0', 0, 0, 0, 0, 0, 0, 0, 35, 41, 0, 0, 0, 0)
-		logger.Debugw("sending heartbeat",
-			"len", len(msg),
-			"data", msg)
 		_, err := s.conn.Write(msg)
 		if err != nil {
 			// Client probably dropped conn
