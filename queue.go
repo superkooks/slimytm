@@ -13,6 +13,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
+const WATCHDOG_INTERVAL = time.Second * 5
+
 type Song struct {
 	ID         string      `json:"videoId"`
 	Title      string      `json:"title"`
@@ -53,6 +55,8 @@ type Queue struct {
 	Loading       bool
 	Paused        bool
 	ElapsedSecs   int
+
+	LastElapsedUpdate time.Time
 }
 
 var queues []*Queue
@@ -88,6 +92,11 @@ var metricSecondsPlayed = promauto.NewCounterVec(prometheus.CounterOpts{
 	Help: "The total number of seconds of audio that has been played",
 }, []string{"player"})
 
+var metricWatchdogInvocations = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "slimytm_watchdog_invocations",
+	Help: "The number of times the watchdog has been invocated to skip a song",
+}, []string{"player"})
+
 func (q *Queue) Watch() {
 	for {
 		// Update metrics
@@ -110,14 +119,15 @@ func (q *Queue) Watch() {
 			metricPlayState.WithLabelValues(q.Player.GetName()).Set(0)
 		}
 
-		// Check whether we have finished a song
 		if q.Playing && len(q.Songs) > 0 && q.Index >= 0 && q.Index < len(q.Songs) {
+			// There is a valid queue
 			metricSecondsPlayed.WithLabelValues(q.Player.GetName()).Add(0.1)
 
 			songTimes := strings.Split(q.Songs[q.Index].Duration, ":")
 			mins, _ := strconv.Atoi(songTimes[0])
 			secs, _ := strconv.Atoi(songTimes[1])
 
+			// Check whether we have finished a song
 			if q.ElapsedSecs >= mins*60+secs-1 {
 				logger.Debug("reached end of song")
 				if q.Index+1 < len(q.Songs) {
@@ -127,6 +137,15 @@ func (q *Queue) Watch() {
 					logger.Debug("reached end of queue")
 					q.Playing = false
 				}
+			}
+
+			// Watchdog check
+			shouldBePlaying := q.Playing && !q.Paused && !q.Loading
+			if shouldBePlaying && time.Since(q.LastElapsedUpdate) > WATCHDOG_INTERVAL && q.Index+1 < len(q.Songs) {
+				metricWatchdogInvocations.WithLabelValues(q.Player.GetName()).Inc()
+				logger.Warn("watchdog invoked, skipping song")
+
+				q.Next()
 			}
 		}
 

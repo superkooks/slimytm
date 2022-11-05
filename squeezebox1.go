@@ -96,7 +96,12 @@ func (s *squeezebox1) Listener() {
 			}
 
 			bytesPlayed := int(binary.BigEndian.Uint64(b[23:31])) - int(binary.BigEndian.Uint32(b[19:23]))
-			s.Queue.ElapsedSecs = bytesPlayed / 44100 / 2 / 2
+			elapsed := bytesPlayed / 44100 / 2 / 2
+
+			if s.Queue.ElapsedSecs != elapsed {
+				s.Queue.LastElapsedUpdate = time.Now()
+			}
+			s.Queue.ElapsedSecs = elapsed
 
 		} else if string(b[:4]) == "IR  " {
 			if time.Since(lastIR) < IR_INTERVAL {
