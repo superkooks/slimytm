@@ -131,7 +131,6 @@ func main() {
 	// Start the logger
 	conf := zap.NewProductionConfig()
 	conf.OutputPaths = append(conf.OutputPaths, persistent.LogLocations...)
-	conf.Development = true
 	conf.Level.SetLevel(zap.DebugLevel)
 	conf.EncoderConfig = zap.NewProductionEncoderConfig()
 	conf.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
