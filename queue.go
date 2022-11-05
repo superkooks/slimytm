@@ -167,6 +167,7 @@ func (q *Queue) Next() {
 	q.Playing = false
 	q.Paused = false
 	q.Index++
+	q.LastElapsedUpdate = time.Now().Add(WATCHDOG_INTERVAL)
 
 	// Don't run over the end of the queue
 	if q.Index < len(q.Songs) {
@@ -193,6 +194,7 @@ func (q *Queue) Previous() {
 	q.Buffer.Reset()
 	q.Playing = false
 	q.Paused = false
+	q.LastElapsedUpdate = time.Now().Add(WATCHDOG_INTERVAL)
 
 	// Don't run off the end of the queue
 	if q.ElapsedSecs < 5 && q.Index > 0 {
