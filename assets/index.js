@@ -17,7 +17,7 @@ const PlayerHome = {
         :key="playlist.id"
     ></playlist-cover>
 </div>`,
-    created() {
+    mounted() {
         this.$store.dispatch("updatePlaylists")
     }
 }
@@ -43,7 +43,7 @@ const Playlist = {
         </div>
 </div>`,
 
-    created() {
+    mounted() {
         this.$store.commit("currentPlaylist", { title: "Loading...", trackCount: "0", duration: "0 seconds", songs: [] })
 
         this.$store.dispatch("getPlaylist", this.$route.params.id)
