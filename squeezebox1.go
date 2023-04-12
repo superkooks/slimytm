@@ -270,7 +270,7 @@ retry:
 	// Start FFMPEG with the URL, piping stdout to our audio buffer
 	s.Queue.Buffer.Reset()
 	ctx, cancel := context.WithCancel(context.Background())
-	fcmd := exec.CommandContext(ctx, "ffmpeg", "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5", "-i",
+	fcmd := NewCommand(ctx, "ffmpeg", "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5", "-i",
 		string(url), "-f", "wav", "-ar", "44100", "-ac", "2", "-loglevel", "warning", "-vn", "-")
 	fcmd.Stdout = s.Queue.Buffer
 	fcmd.Stderr = os.Stderr
