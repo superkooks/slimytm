@@ -68,6 +68,46 @@ hr {
     background-color: #f2f2f2;
 }
 
+@media (max-aspect-ratio: 1) {
+        html #playlists {
+                padding: 15px;
+        }
+
+        html .playlistCover {
+                width: 150px;
+                margin: 15px;
+        }
+
+        html .playlistCover img {
+                width: 150px;
+                height: 150px;
+        }
+
+        #playerControls {
+                flex-direction: column;
+                height: 140px;
+        }
+
+        #playerControls #playerControlButtons {
+                margin: 0;
+        }
+
+        #playerControls #currentSong {
+                position: unset;
+                transform: unset;
+        }
+
+        #playerControls #playerVolume {
+                margin: 0;
+                margin-top: 5px;
+        }
+
+        #songs .song {
+                margin-left: 0;
+                margin-right: 0;
+        }
+}
+
 #playerControlButtons {
     margin-left: 60px;
     cursor: pointer;
@@ -204,10 +244,14 @@ p#playlistDuration {
     margin-right: 30px;
     margin-top: 9px;
     margin-bottom: 9px;
-    width: 1800px;
+    width: 93%;
     display: flex;
     flex-direction: row;
     align-items: center;
+}
+
+.song > * {
+        margin-right: 10px;
 }
 
 .song .thumbnail {
