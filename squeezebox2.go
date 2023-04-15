@@ -70,7 +70,7 @@ func (s *squeezebox2) Listener() {
 		if errors.Is(err, os.ErrDeadlineExceeded) {
 			// Client has timed out, remove its queue
 			for k, v := range queues {
-				if v.Player.GetID() == s.GetID() {
+				if v.Player.GetID() == s.GetID() && v.Player.(*squeezebox2).conn == s.conn {
 					queues = append(queues[:k], queues[k+1:]...)
 				}
 			}
