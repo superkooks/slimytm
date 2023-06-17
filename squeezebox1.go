@@ -238,13 +238,13 @@ func (s *squeezebox1) Play(videoID string) (cancel func()) {
 retry:
 	start := time.Now()
 
-	// Get the player URL with youtube-dl
-	co := exec.Command("youtube-dl", "https://music.youtube.com/watch?v="+videoID, "-f", "bestaudio[ext=webm]", "-g")
+	// Get the player URL with yt-dlp
+	co := exec.Command("yt-dlp", "https://music.youtube.com/watch?v="+videoID, "-f", "bestaudio[ext=webm]", "-g")
 	logger.Debugw("getting audio download url",
 		"cmd", co.String())
 	b, err := co.CombinedOutput()
 	url := strings.Trim(string(b), " \n")
-	logger.Debugw("youtube-dl command output", "output", url)
+	logger.Debugw("yt-dlp command output", "output", url)
 	if err != nil {
 		logger.Errorw("unable to get audio download url",
 			"err", err)
