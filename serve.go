@@ -118,8 +118,8 @@ func loadVidID(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	queue.Player.Stop()
-	queue.Songs = []Song{{ID: videoID}}
+	queue.Songs = []Song{{ID: videoID, Artists: []Artist{{Name: "idk"}}}}
+	queue.Index = -1
 	queue.Next()
 }
 
