@@ -107,6 +107,22 @@ func ws(w http.ResponseWriter, r *http.Request) {
 	go c.Listener()
 }
 
+func loadVidID(w http.ResponseWriter, r *http.Request) {
+	playerID := r.URL.Query().Get("player")
+	videoID := r.URL.Query().Get("vid")
+
+	var queue *Queue
+	for _, v := range queues {
+		if v.Player.GetID() == playerID {
+			queue = v
+		}
+	}
+
+	queue.Player.Stop()
+	queue.Songs = []Song{{ID: videoID}}
+	queue.Next()
+}
+
 // A middleware to cope for any CORS requests
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -159,6 +175,7 @@ func main() {
 	r.Path("/player/{id}/audio.wav").HandlerFunc(audio)
 	r.Path("/ws").HandlerFunc(ws)
 	r.Path("/metrics").Handler(promhttp.Handler())
+	r.Path("/playID").HandlerFunc(loadVidID)
 
 	logger.Panicw("unable to start http server",
 		"port", 9001,
